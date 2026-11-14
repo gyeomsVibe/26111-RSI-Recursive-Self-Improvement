@@ -1,0 +1,28 @@
+{
+  "incident_date": "2026-11-14",
+  "root_cause": {
+    "binary_proof": "CrimsonDesert.exe v1.0.0.2625: 0x140317850 (GetItemStaticData) + 0x1416223B0 (ItemRecord serializer) prove [ItemRecord+0x08] is a dynamic 16-bit table index into GlobalItemTableManager ([baseAddr+0x06331248] -> [mgr+0x58][tblIdx] -> *(uint32_t*)(staticData+0x00) == real _itemKey). Runtime tblIdx=1 mapped to _itemKey=50001 (Regular Arrow), not _itemKey=1 (Silver), while InjectGoldToMemory also queued EditSelectedItem(targetId=1).",
+    "hud_silver_bug": "SessionBoost._cachedSilver defaulted to 10,000,000,000 (9,990만G) and GetSaveFileSilverAmount returned -1 to avoid spawning Python on UI ticks."
+  },
+  "remediation": {
+    "save_path_template": "<LOCALAPPDATA>/Pearl Abyss/CD/save/<uid>/slot0/save.save",
+    "save_slots_cleaned": {
+      "slot0": {
+        "invKey_2_itemKey_50001": [10000100000, 501],
+        "invKey_8_itemKey_50001": [9619038, 1],
+        "invKey_2_itemKey_1_silver": 187706
+      },
+      "slot2": {
+        "invKey_2_itemKey_50001": [66887706, 501],
+        "invKey_2_itemKey_1_silver": 187706
+      }
+    },
+    "live_memory_engine": "RVA_SAVE_ITEM (cf+0x0D00), RVA_SELECTED_ITEM (cf+0x0F00), and C# TryFindPlayerBagSilverRecord resolve real 32-bit _itemKey via GlobalItemTableManager ([baseAddr+0x06331248]), scope Silver strictly to Player Bag (_inventoryKey == 2), auto-sanitize live _itemKey==50001 stacks > 9999, apply deferred pendGold upon pointer capture, and persist silver_cache.txt (187706 = 1,877.06 G)."
+  },
+  "verification": {
+    "rva_signatures": "RVA_VERIFY_OK=20/20",
+    "self_test": "Gates 1..7 PASS (exit 0)",
+    "ui_overlap_audit": "OVERLAP_COUNT=0",
+    "launcher_trainer_sha256_parity": true
+  }
+}
