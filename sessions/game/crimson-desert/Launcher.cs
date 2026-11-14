@@ -682,7 +682,7 @@ class InGameHudOverlayForm : Form {
                 bool tOn = owner.thiefStealthMode > 0;
                 DrawMenuBtn(g, 498, y, 108, 30, tOn ? "◈ 도둑:무죄ON" : "◈ 도둑:정상", tOn, Color.FromArgb(46, 204, 113), fBtn, delegate { owner.SetThiefStealthMode(tOn ? 0 : 1); }, "top_bar", "thief_toggle");
 
-                DrawMenuBtn(g, 610, y, 106, 30, owner.isNativeAaClarity ? "▣ 화질:AA선명" : "▣ 화질:FSR67%", owner.isNativeAaClarity, Color.FromArgb(52, 152, 219), fBtn, delegate { owner.ToggleResolutionClarity(); }, "top_bar", "clarity_toggle");
+                DrawMenuBtn(g, 610, y, 106, 30, owner.isNativeAaClarity ? "▣ 화질:AA선명" : ("▣ 화질:FSR" + owner.activeFsrScaleLabel), owner.isNativeAaClarity, Color.FromArgb(52, 152, 219), fBtn, delegate { owner.ToggleResolutionClarity(); }, "top_bar", "clarity_toggle");
 
                 DrawMenuBtn(g, 720, y, 128, 30, "⚡ FLiNG 트레이너", false, Color.FromArgb(41, 128, 185), fBtn, delegate { owner.LaunchExternalFlingTrainer(); }, "top_bar", "external_fling");
 
@@ -1189,6 +1189,7 @@ class Launcher : Form {
     internal int gearHiderMode = 1; // 0: 전체표시, 1: 투구숨김(기본 ON), 2: 망토숨김, 3: 투구+망토+납도무기 숨김
     internal int weaponImbueMode = 0; // 0: 없음, 1: 화염폭발, 2: 빙결제압, 3: 뇌전연쇄, 4: 흡혈+치명, 5: 전속성마스터
     internal bool isNativeAaClarity = true; // true: 100% 네이티브 1080p AA 고선명 모드 (칼같은 선명도·화질 극대화), false: 67% FSR Quality
+    internal string activeFsrScaleLabel = "67%";
     internal bool freezeDaytime = false;
     internal string activeImbue = "없음";
     internal static bool SelfTestMode = false;
@@ -2180,7 +2181,7 @@ class Launcher : Form {
         btnTopThiefSwitch.ForeColor = tOn ? Color.Black : Color.White;
         }
         if (btnTopClaritySwitch != null) {
-        btnTopClaritySwitch.Text = isNativeAaClarity ? "▣ 화질: 100% 선명(AA)" : "▣ 화질: 67% FSR 고품질";
+        btnTopClaritySwitch.Text = isNativeAaClarity ? "▣ 화질: 100% 선명(AA)" : ("▣ 화질: " + activeFsrScaleLabel + " FSR 최적화");
         btnTopClaritySwitch.BackColor = isNativeAaClarity ? ACCENT_BLUE : Color.FromArgb(65, 72, 92);
         btnTopClaritySwitch.ForeColor = Color.White;
         }
@@ -2289,6 +2290,7 @@ class Launcher : Form {
                 string sel = node.GetAttribute("_select");
                 if (!string.IsNullOrEmpty(sel)) {
                     isNativeAaClarity = string.Equals(sel, "AA", StringComparison.OrdinalIgnoreCase);
+                    if (!isNativeAaClarity) activeFsrScaleLabel = sel;
                     UpdateTopMasterBar();
                 }
             }

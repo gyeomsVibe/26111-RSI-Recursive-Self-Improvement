@@ -19,6 +19,9 @@ internal sealed class SessionBoost : IDisposable {
     private static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool SetPriorityClass(IntPtr hProcess, uint dwPriorityClass);
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -43,6 +46,7 @@ internal sealed class SessionBoost : IDisposable {
     private const uint PROCESS_SET_INFORMATION = 0x0200;
     private const uint PROCESS_QUERY_INFORMATION = 0x0400;
     private const uint HIGH_PRIORITY_CLASS = 0x00000080;
+    private const uint ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000;
     private const uint NORMAL_PRIORITY_CLASS = 0x00000020;
     private const int ProcessPowerThrottling = 4;
     private const uint PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
@@ -54,6 +58,7 @@ internal sealed class SessionBoost : IDisposable {
     private IntPtr targetHandle = IntPtr.Zero;
     private Process owned;
     private DateTime started;
+    private DateTime _lastBoostScanUtc = DateTime.MinValue;
     private ProcessPriorityClass original = ProcessPriorityClass.Normal;
     public bool Enabled;
     public int Pid { get; private set; }
@@ -75,13 +80,24 @@ internal sealed class SessionBoost : IDisposable {
 
     public string Refresh(string expectedPath) {
         if (!Enabled) { Restore(); return "세션 부스터 꺼짐"; }
-        if (owned != null) {
+        if (targetHandle != IntPtr.Zero) {
+            uint exitCode;
+            if (GetExitCodeProcess(targetHandle, out exitCode) && exitCode == 259u) {
+                return "세션 부스터 가동 중: " + Summary;
+            }
+            Restore();
+        } else if (owned != null) {
             try {
                 owned.Refresh();
                 if (!owned.HasExited) return "세션 부스터 가동 중: " + Summary;
             } catch { }
             Restore();
         }
+        DateTime nowUtc = DateTime.UtcNow;
+        if (_lastBoostScanUtc != DateTime.MinValue && (nowUtc - _lastBoostScanUtc).TotalMilliseconds < 2500.0) {
+            return "세션 부스터 대기·다음 게임 실행 시 자동 적용";
+        }
+        _lastBoostScanUtc = nowUtc;
         var games = Process.GetProcessesByName("CrimsonDesert");
         try {
             if (games.Length == 0) return "세션 부스터 대기·다음 게임 실행 시 자동 적용";
@@ -95,10 +111,25 @@ internal sealed class SessionBoost : IDisposable {
             try { original = p.PriorityClass; } catch { original = ProcessPriorityClass.Normal; }
             try { started = p.StartTime.ToUniversalTime(); } catch { started = DateTime.UtcNow; }
             try { p.PriorityBoostEnabled = true; } catch { }
-            try { DisablePowerThrottling(p.Handle); } catch { }
+            targetHandle = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_INFORMATION, false, p.Id);
+            try { timerActive = (timeBeginPeriod(1) == 0); } catch { timerActive = false; }
+            uint setR = 10000u;
+            try {
+                uint minR, maxR, curR;
+                if (NtQueryTimerResolution(out minR, out maxR, out curR) == 0 && NtSetTimerResolution(Math.Max(5000u, maxR), true, out setR) == 0) {
+                    ntTimerActive = true;
+                }
+            } catch { }
+            try { DisablePowerThrottling(targetHandle != IntPtr.Zero ? targetHandle : p.Handle); } catch { }
+            if (targetHandle != IntPtr.Zero) {
+                try { if (SetPriorityClass(targetHandle, ABOVE_NORMAL_PRIORITY_CLASS)) PriorityRaised = true; } catch { }
+            }
             try { owned = Process.GetProcessById(p.Id); } catch { owned = null; }
             Pid = p.Id;
-            Summary = "정상 우선순위 유지 · CPU 스로틀링 해제";
+            Summary = string.Format(
+                "우선순위 ABOVE_NORMAL · 타이머 {0} · CPU 스로틀링 해제",
+                ntTimerActive ? string.Format("{0:0.0}ms", setR / 10000.0) : (timerActive ? "1.0ms" : "기본")
+            );
             return "세션 부스터 적용 완료 (" + Summary + ")";
         } finally {
             foreach (var p in games) p.Dispose();
@@ -147,6 +178,9 @@ internal sealed class SessionBoost : IDisposable {
             try { CloseHandle(targetHandle); } catch { }
             targetHandle = IntPtr.Zero;
         }
+        PriorityRaised = false;
+        Pid = 0;
+        _lastBoostScanUtc = DateTime.MinValue;
         if (ntTimerActive) { uint d; try { NtSetTimerResolution(0, false, out d); } catch { } ntTimerActive = false; }
         if (timerActive) { try { timeEndPeriod(1); } catch { } timerActive = false; }
         if (owned != null) { try { owned.Dispose(); } catch { } owned = null; }
@@ -352,6 +386,8 @@ internal static class LiveMemoryCheatEngine {
     const long OFF_CODE_FRIENDLY_DAILY = 0x2300;
     const long OFF_CODE_AFFINITY_ADD   = 0x2400;
     const long OFF_CODE_FRIENDLY_ADD   = 0x2500;
+    const long OFF_CODE_SAVE_ITEM_BODY     = 0x2680; // 0x2680..0x2A7F (1024B body)
+    const long OFF_CODE_SELECTED_ITEM_BODY = 0x2A80; // 0x2A80..0x2FFF (1408B body)
 
     // Cave Data Offsets (dataBase = cf + 0x3000)
     const long DATA_BASE_OFF          = 0x3000;
@@ -557,6 +593,13 @@ internal static class LiveMemoryCheatEngine {
     static byte[] ReadFlingCtl(long addr, int len) { return ExtFlingRunning() ? ReadBytes(addr, len) : null; }
     static bool WriteFlingCtl(long addr, byte[] data) { return ExtFlingRunning() && WriteBytes(addr, data); }
 
+    static void CacheCaveBytes(long addr, byte[] data) {
+        if (data == null || data.Length == 0 || data.Length > 8) return;
+        byte[] copy = new byte[data.Length];
+        Buffer.BlockCopy(data, 0, copy, 0, data.Length);
+        _caveParamCache[addr] = copy;
+    }
+
     static bool WriteBytes(long addr, byte[] data) {
         if (hProc == IntPtr.Zero || data == null || data.Length == 0) return false;
         long cf = caveFling != IntPtr.Zero ? caveFling.ToInt64() : 0L;
@@ -567,12 +610,17 @@ internal static class LiveMemoryCheatEngine {
             for (int i = 0; i < data.Length; i++) {
                 if (existing[i] != data[i]) { same = false; break; }
             }
-            if (same) return true;
+            if (same) {
+                if (inCave) CacheCaveBytes(addr, data);
+                return true;
+            }
         }
         if (inCave) {
             // caveFling is already RWX: skip VirtualProtectEx to avoid cross-core IPI TLB shootdowns.
             IntPtr writtenCave;
-            return WriteProcessMemory(hProc, (IntPtr)addr, data, data.Length, out writtenCave);
+            bool okCave = WriteProcessMemory(hProc, (IntPtr)addr, data, data.Length, out writtenCave);
+            if (okCave) CacheCaveBytes(addr, data);
+            return okCave;
         }
         uint oldProt;
         if (!VirtualProtectEx(hProc, (IntPtr)addr, (uint)data.Length, PAGE_EXECUTE_READWRITE, out oldProt)) return false;
@@ -1593,6 +1641,9 @@ internal static class LiveMemoryCheatEngine {
             if (hookBreathVitalsInstalled) hooks.Add("\"BREATH_VITALS\"");
             if (hookSlotExpandInstalled)   hooks.Add("\"SLOT_EXPAND\"");
             if (hookRomanceTrustInstalled) hooks.Add("\"ROMANCE_TRUST\"");
+            if (hookFriendlyDailyInstalled) hooks.Add("\"FRIENDLY_DAILY\"");
+            if (hookAffinityAddInstalled)  hooks.Add("\"AFFINITY_ADD\"");
+            if (hookFriendlyAddInstalled)  hooks.Add("\"FRIENDLY_ADD\"");
             if (hookCountItemsInstalled)   hooks.Add("\"COUNT_ITEMS\"");
             if (hookWantedEvalInstalled)   hooks.Add("\"WANTED_EVAL\"");
 
@@ -1804,8 +1855,27 @@ internal static class LiveMemoryCheatEngine {
         lbl[okLbl] = code.Count;
     }
 
+    static void FreeCaveOnInitFail() {
+        if (hProc != IntPtr.Zero && caveFling != IntPtr.Zero) {
+            try { VirtualFreeEx(hProc, caveFling, 0, MEM_RELEASE); } catch { }
+        }
+        caveFling = IntPtr.Zero;
+        _caveParamCache.Clear();
+        trampolinesReady = false;
+    }
+
+    static void WriteCaveSlot(string name, long cf, long slotOff, long limitOff, byte[] bytes) {
+        int maxLen = (int)(limitOff - slotOff);
+        if (bytes.Length > maxLen) {
+            throw new InvalidOperationException(string.Format("{0} cave overflow: {1} > {2}", name, bytes.Length, maxLen));
+        }
+        if (!WriteBytes(cf + slotOff, bytes)) {
+            throw new InvalidOperationException(name + " cave write failed");
+        }
+    }
+
     // =========================================================================
-    // Initialize All 18 Verified Trampolines in One 16KB Cave (No Vanilla Overwrite)
+    // Initialize All 21 Verified Trampolines in One 16KB Cave (No Vanilla Overwrite)
     // =========================================================================
     static bool InitTrampolines() {
         long addrPlayer = baseAddr + RVA_PLAYER;
@@ -1831,10 +1901,12 @@ internal static class LiveMemoryCheatEngine {
         for (int i = 0; i < allAddrs.Length; i++) {
             if (Math.Abs(cf - (allAddrs[i] + 5)) > 0x7FFF0000L) {
                 EngLog(string.Format("Cave reach overflow at addr 0x{0:X}", allAddrs[i]));
+                FreeCaveOnInitFail();
                 return false;
             }
         }
 
+        try {
         // Initialize 4KB data block cleanly
         WriteBytes(cf + DATA_BASE_OFF, new byte[4096]);
         WriteBytes(cf + OFF_DATA_KISS_MULT,    BitConverter.GetBytes(1.0f));
@@ -1923,7 +1995,7 @@ internal static class LiveMemoryCheatEngine {
             lbl["done"] = code.Count;
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_PLAYER + 8);
-            WriteBytes(cf + OFF_CODE_PLAYER, code.ToArray());
+            WriteCaveSlot("PLAYER", cf, OFF_CODE_PLAYER, OFF_CODE_STATS, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2052,7 +2124,7 @@ internal static class LiveMemoryCheatEngine {
             lbl["ret"] = code.Count;
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_STATS + 8);
-            WriteBytes(cf + OFF_CODE_STATS, code.ToArray());
+            WriteCaveSlot("STATS", cf, OFF_CODE_STATS, OFF_CODE_COMMIT, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2166,7 +2238,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_COMMIT);                                    // mov [rdi+8], rbx; mov rbx, [rsp+0x48]
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_COMMIT + 9);
-            WriteBytes(cBase, code.ToArray());
+            WriteCaveSlot("COMMIT", cf, OFF_CODE_COMMIT, OFF_CODE_DEFENSE, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2197,7 +2269,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x5A, 0x5B });
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_DEFENSE + 15);
-            WriteBytes(cf + OFF_CODE_DEFENSE, code.ToArray());
+            WriteCaveSlot("DEFENSE", cf, OFF_CODE_DEFENSE, OFF_CODE_DMG, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2271,7 +2343,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x8D, 0x4C, 0x24, 0x50 });       // lea rcx, [rsp+0x50]
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_DMG + 13);
-            WriteBytes(cf + OFF_CODE_DMG, code.ToArray());
+            WriteCaveSlot("DMG", cf, OFF_CODE_DMG, OFF_CODE_SAVE_ITEM, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2280,7 +2352,7 @@ internal static class LiveMemoryCheatEngine {
         //    CRITICAL: executes 48 83 7E 10 00 LAST to preserve RFLAGS for 0x01DF9585 jle!
         // ---------------------------------------------------------------------
         {
-            long svBase = cf + OFF_CODE_SAVE_ITEM;
+            long svBase = cf + OFF_CODE_SAVE_ITEM_BODY;
             long dItemTableMgr = baseAddr + RVA_ITEM_TABLE_MGR;
             var code = new List<byte>();
             var refs = new List<Rel32Ref>();
@@ -2336,16 +2408,17 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_SAVE_ITEM);                                 // cmp qword [rsi+0x10], 0 (sets RFLAGS!)
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_SAVE_ITEM + 5);
-            if (code.Count > (int)(OFF_CODE_SELECTED_ITEM - OFF_CODE_SAVE_ITEM))
-                throw new InvalidOperationException("SAVE_ITEM cave overflow: " + code.Count);
-            WriteBytes(svBase, code.ToArray());
+            WriteCaveSlot("SAVE_ITEM_BODY", cf, OFF_CODE_SAVE_ITEM_BODY, OFF_CODE_SELECTED_ITEM_BODY, code.ToArray());
+            var svStub = new List<byte> { 0xE9 };
+            svStub.AddRange(BitConverter.GetBytes((int)(OFF_CODE_SAVE_ITEM_BODY - (OFF_CODE_SAVE_ITEM + 5))));
+            WriteCaveSlot("SAVE_ITEM_STUB", cf, OFF_CODE_SAVE_ITEM, OFF_CODE_SELECTED_ITEM, svStub.ToArray());
         }
 
         // ---------------------------------------------------------------------
-        // 7. RVA_SELECTED_ITEM (cf + 0x0F00, 10B: rbx ItemRecord, r13 InventoryContainer)
+        // 7. RVA_SELECTED_ITEM (cf + 0x0F00 -> E9 -> cf + 0x2A80, 10B: rbx ItemRecord, r13 InventoryContainer)
         // ---------------------------------------------------------------------
         {
-            long slBase = cf + OFF_CODE_SELECTED_ITEM;
+            long slBase = cf + OFF_CODE_SELECTED_ITEM_BODY;
             long dItemTableMgr = baseAddr + RVA_ITEM_TABLE_MGR;
             var code = new List<byte>();
             var refs = new List<Rel32Ref>();
@@ -2405,9 +2478,10 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_SELECTED_ITEM);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_SELECTED_ITEM + 10);
-            if (code.Count > (int)(OFF_CODE_KISS - OFF_CODE_SELECTED_ITEM))
-                throw new InvalidOperationException("SELECTED_ITEM cave overflow: " + code.Count);
-            WriteBytes(slBase, code.ToArray());
+            WriteCaveSlot("SELECTED_ITEM_BODY", cf, OFF_CODE_SELECTED_ITEM_BODY, DATA_BASE_OFF, code.ToArray());
+            var slStub = new List<byte> { 0xE9 };
+            slStub.AddRange(BitConverter.GetBytes((int)(OFF_CODE_SELECTED_ITEM_BODY - (OFF_CODE_SELECTED_ITEM + 5))));
+            WriteCaveSlot("SELECTED_ITEM_STUB", cf, OFF_CODE_SELECTED_ITEM, OFF_CODE_KISS, slStub.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2476,7 +2550,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_KISS);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_KISS + 5);
-            WriteBytes(cf + OFF_CODE_KISS, code.ToArray());
+            WriteCaveSlot("KISS", cf, OFF_CODE_KISS, OFF_CODE_DAYTIME, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2512,7 +2586,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_DAYTIME);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_DAYTIME + 5);
-            WriteBytes(cf + OFF_CODE_DAYTIME, code.ToArray());
+            WriteCaveSlot("DAYTIME", cf, OFF_CODE_DAYTIME, OFF_CODE_EXP, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2526,7 +2600,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(BitConverter.GetBytes((int)(dExpMult - (eBase + code.Count + 4))));
             code.AddRange(new byte[] { 0xC5, 0xF2, 0x58, 0xD2 });             // vaddss xmm2, xmm1, xmm2
             EmitAbsJmp(code, baseAddr + RVA_EXP + 8);
-            WriteBytes(eBase, code.ToArray());
+            WriteCaveSlot("EXP", cf, OFF_CODE_EXP, OFF_CODE_DURABILITY, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2578,7 +2652,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_DURABILITY);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_DURABILITY + 11);
-            WriteBytes(durBase, code.ToArray());
+            WriteCaveSlot("DURABILITY", cf, OFF_CODE_DURABILITY, OFF_CODE_CRIME_EVAL, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2654,7 +2728,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_CRIME_EVAL);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_CRIME_EVAL + 9);
-            WriteBytes(crBase, code.ToArray());
+            WriteCaveSlot("CRIME_EVAL", cf, OFF_CODE_CRIME_EVAL, OFF_CODE_HORSE_TAMING, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2681,7 +2755,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0xC5, 0xFA, 0x11, 0x83, 0xD4, 0x0C, 0x00, 0x00 }); // vmovss [rbx+0xCD4], xmm0
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_HORSE_TAMING + 12);
-            WriteBytes(htBase, code.ToArray());
+            WriteCaveSlot("HORSE_TAMING", cf, OFF_CODE_HORSE_TAMING, OFF_CODE_BREATH_VITALS, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2777,7 +2851,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x85, 0xD2 });                   // test rdx, rdx (RFLAGS!)
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_BREATH_VITALS + 10);
-            WriteBytes(brBase, code.ToArray());
+            WriteCaveSlot("BREATH_VITALS", cf, OFF_CODE_BREATH_VITALS, OFF_CODE_SLOT_EXPAND, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2856,7 +2930,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(VANILLA_SLOT_EXPAND);
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_SLOT_EXPAND + 10);
-            WriteBytes(seBase, code.ToArray());
+            WriteCaveSlot("SLOT_EXPAND", cf, OFF_CODE_SLOT_EXPAND, OFF_CODE_ROMANCE_TRUST, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2872,7 +2946,7 @@ internal static class LiveMemoryCheatEngine {
             code.Add(0x58);                                                   // pop rax
             code.AddRange(VANILLA_ROMANCE_TRUST);
             EmitAbsJmp(code, baseAddr + RVA_ROMANCE_TRUST + 7);
-            WriteBytes(rtBase, code.ToArray());
+            WriteCaveSlot("ROMANCE_TRUST", cf, OFF_CODE_ROMANCE_TRUST, OFF_CODE_COUNT_ITEMS, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2900,7 +2974,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x59, 0x58 });
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + 0x0D9A3B70L);
-            WriteBytes(fdBase, code.ToArray());
+            WriteCaveSlot("FRIENDLY_DAILY", cf, OFF_CODE_FRIENDLY_DAILY, OFF_CODE_AFFINITY_ADD, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2942,7 +3016,7 @@ internal static class LiveMemoryCheatEngine {
             code.Add(0x58);                                                   // pop rax
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + 0x0D9A7780L);
-            WriteBytes(aaBase, code.ToArray());
+            WriteCaveSlot("AFFINITY_ADD", cf, OFF_CODE_AFFINITY_ADD, OFF_CODE_FRIENDLY_ADD, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2985,7 +3059,7 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x89, 0x45, 0xCF });             // mov [rbp-0x31], rax
             ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_FRIENDLY_ADD + 8);
-            WriteBytes(faBase, code.ToArray());
+            WriteCaveSlot("FRIENDLY_ADD", cf, OFF_CODE_FRIENDLY_ADD, OFF_CODE_SAVE_ITEM_BODY, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -2997,7 +3071,7 @@ internal static class LiveMemoryCheatEngine {
             EmitRipIncDword(code, ciBase, cf + OFF_DATA_CNT_HITS);
             code.AddRange(VANILLA_COUNT_ITEMS);
             EmitAbsJmp(code, baseAddr + RVA_COUNT_ITEMS + 10);
-            WriteBytes(ciBase, code.ToArray());
+            WriteCaveSlot("COUNT_ITEMS", cf, OFF_CODE_COUNT_ITEMS, OFF_CODE_WANTED_EVAL, code.ToArray());
         }
 
         // ---------------------------------------------------------------------
@@ -3009,7 +3083,7 @@ internal static class LiveMemoryCheatEngine {
             EmitRipIncDword(code, wBase, cf + OFF_DATA_WANTED_HITS);
             code.AddRange(VANILLA_WANTED_EVAL);
             EmitAbsJmp(code, baseAddr + RVA_WANTED_EVAL + 7);
-            WriteBytes(wBase, code.ToArray());
+            WriteCaveSlot("WANTED_EVAL", cf, OFF_CODE_WANTED_EVAL, OFF_CODE_FRIENDLY_DAILY, code.ToArray());
         }
 
         // Note: Never blindly write VANILLA_* into game memory during InitTrampolines()!
@@ -3020,8 +3094,13 @@ internal static class LiveMemoryCheatEngine {
         hookRomanceTrustInstalled = hookFriendlyDailyInstalled = hookAffinityAddInstalled = hookFriendlyAddInstalled = hookCountItemsInstalled = hookWantedEvalInstalled = false;
 
         trampolinesReady = true;
-        EngLog(string.Format("InitTrampolines READY @ 0x{0:X} (0x4000 bytes, 18 hooks)", cf));
+        EngLog(string.Format("InitTrampolines READY @ 0x{0:X} (0x4000 bytes, 21 hooks)", cf));
         return true;
+        } catch (Exception ex) {
+            EngLog("InitTrampolines FAILED: " + ex.Message);
+            FreeCaveOnInitFail();
+            return false;
+        }
     }
 
     // =========================================================================

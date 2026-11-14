@@ -60,5 +60,105 @@
     "autoplay_self_test": "[AUTOPLAY-SELF-TEST PASS]",
     "nvidia_profile_verify": "17/17 Matches=True (Ultra Low Latency=1, Max Pre-Rendered Frames=1, Max FPS=60)",
     "rsi_watcher_alive": 1
+  },
+  "live_in_game_verification_20261115": {
+    "cave_overflow_and_fsr_label_fix": {
+      "sessionboost_cave_layout": {
+        "OFF_CODE_SAVE_ITEM_BODY": "0x2680 (1024B)",
+        "OFF_CODE_SELECTED_ITEM_BODY": "0x2A80 (1408B)",
+        "preserved_range": "0x0000..0x2500 & DATA_BASE_OFF=0x3000 (5B E9 stubs at 0x0D00/0x0F00)",
+        "guards": "WriteCaveSlot() around 21 trampolines + 2 stubs; FreeCaveOnInitFail() + try/catch"
+      },
+      "hud_fsr_label_sync": "Launcher.activeFsrScaleLabel synced from _upscaleResolution -> '▣ 화질:FSR59%'",
+      "engine_log_ready": "InitTrampolines READY @ 0x13FF00000 (0x4000 bytes, 21 hooks)",
+      "engine_log_error_count": 0
+    },
+    "stage_a_all_tabs_140_live": {
+      "session_id": "20261115_000421_romance_opt_hud_v2",
+      "returncode": 0,
+      "hud_buttons_passed": "140/140 (top=7/7, tabs=4/4, rows=129/129)",
+      "failed_buttons": [],
+      "romance_scales_verified": "6/6 ([2.0, 3.0, 5.0, 10.0, 100.0, 1.0])",
+      "silver_injections_verified": "6/6 (133,487,706 -> 199,987,706)",
+      "presentmon_csv": "20261115-000421-romance_opt_hud_v2-frames.csv",
+      "presentmon_summary": {
+        "total_frames": 2555,
+        "mean_present_fps": 38.39,
+        "mean_present_ms": 26.05,
+        "p95_present_ms": 33.44,
+        "p99_present_ms": 36.98,
+        "slowest_1pct_fps": 16.43,
+        "stutter_33ms_pct": 5.166,
+        "mean_gpu_busy_ms": 25.87,
+        "mean_cpu_busy_ms": 9.37,
+        "mean_render_present_lat_ms": 29.34,
+        "present_modes": {
+          "Composed: Flip": 2555
+        }
+      }
+    },
+    "phase2_kernel_and_4hook_rpm_proof": {
+      "base_addr": "0x140000000",
+      "cave_addr": "0x13FF00000",
+      "priority_class_hex": "0x8000 (ABOVE_NORMAL_PRIORITY_CLASS)",
+      "timer_min_100ns": 156250,
+      "timer_max_100ns": 5000,
+      "timer_cur_100ns": 4960,
+      "timer_le_1ms": true,
+      "cycle_install_revert_reinstall": {
+        "state_1_install_rom2": {
+          "rom_f32": 2.0,
+          "ROMANCE_TRUST": "0x01BDB420 -> 0x13FF02000",
+          "FRIENDLY_DAILY": "0x01BDC930 -> 0x13FF02300",
+          "AFFINITY_ADD": "0x01BDCC50 -> 0x13FF02400",
+          "FRIENDLY_ADD": "0x0239B016 -> 0x13FF02500",
+          "all_in_cave": true
+        },
+        "state_2_revert_rom1": {
+          "rom_f32": 1.0,
+          "all_4_matches_vanilla": true
+        },
+        "state_3_reinstall_rom2": {
+          "rom_f32": 2.0,
+          "all_4_in_cave": true
+        }
+      }
+    },
+    "stage_b_pure_3d_fsr59_benchmark": {
+      "hud_visible_during_3d": false,
+      "cycles_completed": 14,
+      "presentmon_csv": "20261115-001538-pure3d_fsr59-frames.csv",
+      "presentmon_summary": {
+        "total_frames": 1745,
+        "mean_present_fps": 38.88,
+        "mean_present_ms": 25.72,
+        "p95_present_ms": 33.34,
+        "p99_present_ms": 38.68,
+        "slowest_1pct_fps": 16.15,
+        "stutter_33ms_pct": 5.1,
+        "mean_gpu_busy_ms": 25.58,
+        "mean_cpu_busy_ms": 9.35,
+        "mean_render_present_lat_ms": 29.23,
+        "present_modes": {
+          "Composed: Flip": 1745
+        }
+      },
+      "gpu_and_hook_telemetry": {
+        "mean_gpu_util_pct": 99.1,
+        "peak_vram_mb": 3974,
+        "mean_gpu_clock_mhz": 2012.0,
+        "peak_gpu_temp_c": 53,
+        "peak_ram_mb": 5215.4,
+        "hit_counters_delta": {
+          "breath": 11026,
+          "crime": 2793,
+          "tame": 1942
+        }
+      },
+      "rsi_generation": 143,
+      "rsi_active_arm": "FSR59_UltraResponsive",
+      "rsi_reward_score": 62.6,
+      "crashes": 0
+    }
   }
 }

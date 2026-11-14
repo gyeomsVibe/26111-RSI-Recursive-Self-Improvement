@@ -1,12 +1,12 @@
 {
-  "session_id": "20261114_191152_u08_alltabs",
-  "tag": "u08_alltabs",
+  "session_id": "20261115_000421_romance_opt_hud_v2",
+  "tag": "romance_opt_hud_v2",
   "mode": "hud-all-tabs-experiment",
   "trigger_verified": true,
   "aborted": false,
   "abort_reason": "",
   "aborted_by_human_input": false,
-  "completed_at": "2026-11-14T19:14:38",
+  "completed_at": "2026-11-15T00:07:10",
   "entered_world": true,
   "world_loaded": true,
   "player_ptr_valid": true,
@@ -26,7 +26,7 @@
       "label": "★ 1. 추천 세트",
       "passed": true,
       "observed": {
-        "active": 13,
+        "active": 23,
         "def": 2500
       }
     },
@@ -68,7 +68,7 @@
     {
       "cat": "top_bar",
       "row": "clarity_toggle",
-      "label": "▣ 화질:FSR67%",
+      "label": "▣ 화질:FSR59%",
       "passed": true,
       "observed": {
         "xml_protected": true
@@ -978,8 +978,8 @@
               "label": "+1,000 G",
               "passed": true,
               "got": {
-                "silver": 10000100000,
-                "pendGold": 10000100000
+                "silver": 133487706,
+                "pendGold": 133487706
               },
               "expected": {
                 "delta": 100000
@@ -990,8 +990,8 @@
               "label": "+5,000 G",
               "passed": true,
               "got": {
-                "silver": 10000600000,
-                "pendGold": 10000600000
+                "silver": 133987706,
+                "pendGold": 133987706
               },
               "expected": {
                 "delta": 500000
@@ -1002,8 +1002,8 @@
               "label": "+1만 G",
               "passed": true,
               "got": {
-                "silver": 10001600000,
-                "pendGold": 10001600000
+                "silver": 134987706,
+                "pendGold": 134987706
               },
               "expected": {
                 "delta": 1000000
@@ -1014,8 +1014,8 @@
               "label": "+5만 G",
               "passed": true,
               "got": {
-                "silver": 10006600000,
-                "pendGold": 10006600000
+                "silver": 139987706,
+                "pendGold": 139987706
               },
               "expected": {
                 "delta": 5000000
@@ -1026,8 +1026,8 @@
               "label": "+10만 G",
               "passed": true,
               "got": {
-                "silver": 10016600000,
-                "pendGold": 10016600000
+                "silver": 149987706,
+                "pendGold": 149987706
               },
               "expected": {
                 "delta": 10000000
@@ -1038,8 +1038,8 @@
               "label": "+50만 G",
               "passed": true,
               "got": {
-                "silver": 10066600000,
-                "pendGold": 10066600000
+                "silver": 199987706,
+                "pendGold": 199987706
               },
               "expected": {
                 "delta": 50000000
@@ -1277,61 +1277,61 @@
   "action_probes": [
     {
       "tab_idx": 0,
-      "mean_frame_delta": 16.25,
-      "max_frame_delta": 18.66,
+      "mean_frame_delta": 14.32,
+      "max_frame_delta": 16.01,
       "stuck_recoveries": 0,
-      "start_luma": 34.64,
-      "start_std_luma": 26.06
+      "start_luma": 34.04,
+      "start_std_luma": 20.72
     },
     {
       "tab_idx": 1,
-      "mean_frame_delta": 35.86,
-      "max_frame_delta": 47.59,
+      "mean_frame_delta": 40.93,
+      "max_frame_delta": 47.42,
       "stuck_recoveries": 0,
-      "start_luma": 82.2,
-      "start_std_luma": 50.61
+      "start_luma": 71.75,
+      "start_std_luma": 48.25
     },
     {
       "tab_idx": 2,
-      "mean_frame_delta": 39.3,
-      "max_frame_delta": 50.56,
+      "mean_frame_delta": 33.87,
+      "max_frame_delta": 46.31,
       "stuck_recoveries": 0,
-      "start_luma": 77.1,
-      "start_std_luma": 52.76
+      "start_luma": 84.46,
+      "start_std_luma": 52.87
     },
     {
       "tab_idx": 3,
-      "mean_frame_delta": 26.28,
-      "max_frame_delta": 36.17,
-      "stuck_recoveries": 1,
-      "start_luma": 78.6,
-      "start_std_luma": 60.14
+      "mean_frame_delta": 49.58,
+      "max_frame_delta": 52.54,
+      "stuck_recoveries": 0,
+      "start_luma": 74.71,
+      "start_std_luma": 58.0
     }
   ],
   "proof_screenshots": [
-    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab1_in_game.png",
-    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab2_in_game.png",
-    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab3_in_game.png",
-    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab4_in_game.png"
+    "tuning\\research\\rsi_telemetry\\live_hud_proof\\tab1_in_game.png",
+    "tuning\\research\\rsi_telemetry\\live_hud_proof\\tab2_in_game.png",
+    "tuning\\research\\rsi_telemetry\\live_hud_proof\\tab3_in_game.png",
+    "tuning\\research\\rsi_telemetry\\live_hud_proof\\tab4_in_game.png"
   ],
-  "presentmon_csv_path": "D:\\Games\\Crimson Desert\\tuning\\research\\sessions\\20261114-191152-u08_alltabs-frames.csv",
+  "presentmon_csv_path": "tuning\\research\\sessions\\20261115-000421-romance_opt_hud_v2-frames.csv",
   "presentmon_summary": {
-    "total_frames": 1921,
-    "mean_present_fps": 30.75,
-    "mean_present_ms": 32.52,
-    "p95_present_ms": 39.87,
-    "p99_present_ms": 46.38,
-    "slowest_1pct_fps": 13.15,
-    "stutter_33ms_pct": 43.103,
-    "mean_gpu_busy_ms": 32.41,
-    "mean_cpu_busy_ms": 10.04,
-    "mean_render_present_lat_ms": 36.78,
+    "total_frames": 2555,
+    "mean_present_fps": 38.39,
+    "mean_present_ms": 26.05,
+    "p95_present_ms": 33.44,
+    "p99_present_ms": 36.98,
+    "slowest_1pct_fps": 16.43,
+    "stutter_33ms_pct": 5.166,
+    "mean_gpu_busy_ms": 25.87,
+    "mean_cpu_busy_ms": 9.37,
+    "mean_render_present_lat_ms": 29.34,
     "present_modes": {
-      "Composed: Flip": 1923
+      "Composed: Flip": 2555
     },
-    "csv_file": "20261114-191152-u08_alltabs-frames.csv"
+    "csv_file": "20261115-000421-romance_opt_hud_v2-frames.csv"
   },
-  "peak_ram_mb": 5276.3,
-  "peak_vram_mb": 4344,
-  "peak_gpu_temp_c": 54
+  "peak_ram_mb": 5433.5,
+  "peak_vram_mb": 3890,
+  "peak_gpu_temp_c": 52
 }
