@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gyeomsVibe/261114---RSI-/blob/main/sessions/game/schema/unified_game_rsi.schema.json",
+  "title": "Unified Game RSI Telemetry & Optimization Snapshot",
+  "description": "Cross-project standardized JSON schema for the Game-Domain Recursive Self-Improvement (RSI) Engine v4.1.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "domain",
+    "project_id",
+    "engine_version",
+    "updated_at",
+    "closed_loop_stages",
+    "current_generation",
+    "active_arm",
+    "active_parameters",
+    "arm_stats",
+    "recent_generations",
+    "editor_verification",
+    "guardrails"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "domain": { "type": "string", "const": "game" },
+    "project_id": { "type": "string", "minLength": 1 },
+    "engine_version": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "closed_loop_stages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 5
+    },
+    "current_generation": { "type": "integer", "minimum": 1 },
+    "active_arm": { "type": "string", "minLength": 1 },
+    "active_parameters": {
+      "type": "object",
+      "required": ["arm_id", "scale_display", "texture", "model", "water"],
+      "properties": {
+        "arm_id": { "type": "string" },
+        "scale_display": { "type": "string" },
+        "texture": { "type": "string" },
+        "model": { "type": "string" },
+        "water": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "arm_stats": { "type": "object" },
+    "recent_generations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["generation", "timestamp", "arm_before", "arm_after", "decision_mode", "reward_score", "bottleneck", "metrics"],
+        "properties": {
+          "generation": { "type": "integer" },
+          "timestamp": { "type": "string" },
+          "processed_files": { "type": "array", "items": { "type": "string" } },
+          "arm_before": { "type": "string" },
+          "arm_after": { "type": "string" },
+          "decision_mode": { "type": "string" },
+          "reward_score": { "type": "number" },
+          "bottleneck": { "type": "string" },
+          "metrics": { "type": "object" },
+          "parameters": { "type": "object" },
+          "snapshot": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "editor_verification": {
+      "type": "object",
+      "properties": {
+        "hooked_sites_count": { "type": "integer", "minimum": 0 },
+        "hooked_sites": { "type": "array", "items": { "type": "string" } },
+        "verified_keys_count": { "type": "integer", "minimum": 0 },
+        "ineffective_keys": { "type": "array", "items": { "type": "string" } },
+        "sessions": { "type": "integer", "minimum": 0 },
+        "hit_totals": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "guardrails": {
+      "type": "object",
+      "required": ["monotonic_scale_rank", "min_major_frames", "named_mutex", "xml_3tag_contract"],
+      "properties": {
+        "monotonic_scale_rank": { "type": "boolean" },
+        "min_major_frames": { "type": "integer", "minimum": 1 },
+        "named_mutex": { "type": "string" },
+        "xml_3tag_contract": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

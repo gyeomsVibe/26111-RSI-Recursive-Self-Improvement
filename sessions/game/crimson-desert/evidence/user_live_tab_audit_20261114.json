@@ -1,0 +1,185 @@
+{
+  "audit_version": "1.0.0",
+  "project_id": "crimson-desert",
+  "engine_version": "4.1",
+  "session_window": "2026-11-14 14:21:53 ~ 14:39:15 +09:00",
+  "generated_at": "2026-11-14T15:13:15+09:00",
+  "sanitized_for_public_repo": true,
+  "live_hook_timeline": {
+    "session_init": {
+      "timestamp": "14:21:53.327",
+      "trampoline_base": "0x13FF00000",
+      "trampoline_size": "0x4000",
+      "total_hook_slots": 18,
+      "initial_active_hooks": 16,
+      "commit_overrides_initial": 0
+    },
+    "reset_and_reapply_cycle": {
+      "reset_all_to_vanilla": "14:30:33.327 ~ 14:30:33.526",
+      "orphan_hooks_restored": [
+        "EXP",
+        "COMMIT"
+      ],
+      "activate_balanced_preset": "14:30:34.517 ~ 14:30:34.655"
+    },
+    "tabs_exercised": {
+      "tab1_combat_survival": [
+        "DEFENSE OFF 14:30:36.551 -> ON 14:30:37.224",
+        "EXP OFF 14:30:53.326 -> ON 14:30:53.975"
+      ],
+      "tab2_romance_mount_swim": [
+        "ROMANCE_TRUST OFF 14:31:07.053 -> ON 14:31:07.743",
+        "HORSE_TAMING OFF 14:31:10.781 -> ON 14:31:11.454",
+        "COMMIT overrides: 1 @ 14:31:11.801",
+        "BREATH_VITALS OFF 14:31:19.880 -> ON 14:31:20.407"
+      ],
+      "tab3_craft_gear": [
+        "SAVE_ITEM & COUNT_ITEMS OFF 14:31:28.399 -> ON 14:31:28.852",
+        "DURABILITY OFF 14:31:34.007 -> ON 14:31:34.518",
+        "SELECTED_ITEM ON 14:31:42.881"
+      ],
+      "tab4_thief_special": [
+        "WANTED_EVAL OFF 14:31:54.663 -> ON 14:31:55.330",
+        "SLOT_EXPAND OFF 14:31:59.484 -> ON 14:32:00.038"
+      ]
+    },
+    "external_trainer_interoperability": {
+      "fling_yield_events": [
+        "14:32:47.014",
+        "14:33:04.715"
+      ],
+      "grace_window_sec": 12,
+      "auto_reinstall_timestamp": "14:34:42.438 ~ 14:34:42.440",
+      "reinstalled_hooks_count": 17,
+      "last_hook_event": "14:35:10.544 Hook OFF: SELECTED_ITEM"
+    }
+  },
+  "cheat_config_non_vanilla_keys": [
+    "DamageTakenMode=2",
+    "DamageDealtMultiplier=2",
+    "PlayerStaminaMode=4",
+    "CooldownMode=2",
+    "ExpMultiplier=2",
+    "SpeedMultiplier=1.3",
+    "JumpMultiplier=2",
+    "RomanceMultiplier=2",
+    "TamingMultiplier=2",
+    "MountSpeedMultiplier=1.5",
+    "MountStaminaMode=4",
+    "UnderwaterOxygenMultiplier=3",
+    "UnderwaterSpeed=1.5",
+    "CraftCostMode=2",
+    "CraftSuccessMultiplier=2",
+    "DurabilityMode=4",
+    "GearHiderMode=1",
+    "WeaponImbueMode=4",
+    "ThiefStealthMode=1",
+    "ThiefDetectionMode=3",
+    "PickpocketSuccessMode=3",
+    "BountyImmunityMode=3",
+    "ThiefGloveFenceMode=1",
+    "BagExpandSlots=60",
+    "SpecialConvenienceMode=2"
+  ],
+  "editor_verification_summary": {
+    "hooked_sites_count": 18,
+    "verified_keys_count": 26,
+    "ineffective_keys": [],
+    "untriggered_in_scene_keys": [],
+    "session_logs_analyzed": 4,
+    "hit_totals": {
+      "breath": 95829,
+      "tame": 31092,
+      "save": 529,
+      "sel": 13,
+      "commit": 2
+    }
+  },
+  "root_causes_and_v41_fixes": [
+    {
+      "issue": "HUD overlay stole Windows input focus and interrupted live game control",
+      "root_cause": "Interactive HUD transition needed strict non-activating styles and immediate game focus restoration across collapse/expand/re-collapse states",
+      "fix_in_v41": "Enforced WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WM_MOUSEACTIVATE -> MA_NOACTIVATE (3), ShowWindow(Handle, 4) SW_SHOWNOACTIVATE, and RestoreGameFocusIfRunning() in Launcher.cs and CrimsonTrainer.cs (verified by --self-test Gate 5)"
+    },
+    {
+      "issue": "One-beat input/refresh lag during active HUD interaction",
+      "root_cause": "Polling spawned external Python subprocesses instead of direct in-process binary/state reads",
+      "fix_in_v41": "Removed subprocess spawns on hot refresh paths; verified zero python subprocess spawn and GetSaveFileSilverAmount < 250ms in Gate 5 plus 0 Apply-RealCheats processes under watcher daemon"
+    },
+    {
+      "issue": "HUD layout legibility under compact overlay widths",
+      "root_cause": "Label/button crowding risk across tabs",
+      "fix_in_v41": "Audited via --dump-ui achieving OVERLAP_COUNT=0 and unclipped preset badge layout"
+    },
+    {
+      "issue": "Stale historical CSVs re-triggered RSI generations (Gen #137-#139)",
+      "root_cause": "Missing monotonic file mtime watermark allowed Nov 7/8 CSV files to re-enter evolution cycles",
+      "fix_in_v41": "Added monotonic watermark_mtime filter (1794636324.702) in RsiEngine.py analyze_unprocessed_sessions and locked recommended arm back to FSR67_QualityHigh"
+    },
+    {
+      "issue": "Potential local LLM GPU VRAM contention on 8GB GTX 1070",
+      "root_cause": "Keeping local Ollama runners loaded when game launches risks VRAM pressure",
+      "fix_in_v41": "Added unload_ollama_vram_for_game() in RsiWatcher.py triggered on GAME_SESSION_START with keep_alive=0 eviction"
+    }
+  ],
+  "gpu_and_preset_recommendation": {
+    "target_gpu": "NVIDIA GeForce GTX 1070",
+    "recommended_arm": "FSR67_QualityHigh",
+    "recommended_parameters": {
+      "scale_display": "67%",
+      "texture": "High",
+      "model": "High",
+      "water": "High",
+      "lighting": "Medium",
+      "reflection": "Medium",
+      "foliage": "Medium",
+      "effect": "Medium",
+      "shadow": "Low",
+      "fog": "Low",
+      "simulation": "Low",
+      "fov": "1.250000",
+      "zoom": "1.180000"
+    },
+    "arm_comparison": {
+      "AA_UltraSharp": {
+        "pulls": 1,
+        "last_fps": 29.98,
+        "last_p99_ms": 48.41,
+        "ewma_reward": 18.09,
+        "crashes": 1
+      },
+      "AA_BalancedWater": {
+        "pulls": 1,
+        "last_fps": 30.9,
+        "last_p99_ms": 36.05,
+        "ewma_reward": 44.31,
+        "crashes": 0
+      },
+      "FSR67_CombatLock": {
+        "pulls": 1,
+        "last_fps": 33.8,
+        "last_p99_ms": 44.52,
+        "ewma_reward": 48.05,
+        "crashes": 0
+      },
+      "FSR67_QualityHigh": {
+        "pulls": 3,
+        "last_fps": 39.27,
+        "last_p99_ms": 30.96,
+        "ewma_reward": 68.42,
+        "crashes": 0
+      }
+    },
+    "nvidia_profile_verified": {
+      "script": "Apply-NvidiaProfile.ps1 -Mode Verify",
+      "matched_settings": "17/17"
+    }
+  },
+  "user_save_integrity": {
+    "tracked_files_count": 20,
+    "live_session_modified_saves_count": 7,
+    "latest_save_file": "slot102/save.save",
+    "latest_save_mtime": "2026-11-14 14:39:15",
+    "post_1439_mutations_by_automation": 0
+  }
+}
