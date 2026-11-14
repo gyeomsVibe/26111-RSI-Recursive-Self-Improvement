@@ -1,0 +1,64 @@
+{
+  "incident_date": "2026-11-14",
+  "scope": [
+    "npc_romance_friendly_affinity_fix",
+    "live_lag_and_input_latency_optimization"
+  ],
+  "romance_and_friendly_fix": {
+    "binary_rvas": {
+      "RVA_ROMANCE_TRUST": "0x01BDB420",
+      "RVA_FRIENDLY_DAILY": "0x01BDC930",
+      "RVA_AFFINITY_ADD": "0x01BDCC50",
+      "RVA_FRIENDLY_ADD": "0x0239B016"
+    },
+    "live_hooks": "SessionBoost installs daily cap bypass at RVA_FRIENDLY_DAILY (clears _dailyCount offsets +0x18/+0x28/+0x38 when RomanceMultiplier > 1.05), Affinity EXP multiplier/max at RVA_AFFINITY_ADD (r9 delta -> 10000 on >=90), and Friendly EXP multiplier/max at RVA_FRIENDLY_ADD (rbx+0x20 -> rax -> [rbp-0x31], returning cleanly to +8 = 0x0239B01E).",
+    "save_patcher": "Apply-RealCheats.py adds --reset-friendly-daily and upgrades --romance-max across FriendlySaveData (_friendlyDataList with _level preserved, _affinityDataList with _level=10) and FieldNPCSaveData (_friendly/_affinity) plus *_DailyCountData (_dailyCount=0, _lastUpdateTime=0) with exact PARC byte-width preservation.",
+    "scratch_validation": {
+      "reset_friendly_daily_slot0": {
+        "raw_bytes": 4032071,
+        "daily_nonzero_after": 0,
+        "time_nonzero_after": 0,
+        "friendly_exps_preserved": true
+      },
+      "romance_max_slot0": {
+        "raw_bytes": 4032071,
+        "daily_nonzero_after": 0,
+        "friendly_exps_after": 9999,
+        "friendly_levels_after": 0
+      }
+    },
+    "live_slots_daily_reset": [
+      "slot0 (4,032,071B)",
+      "slot1 (4,240,939B)",
+      "slot2 (4,164,326B)",
+      "slot100 (4,241,842B)",
+      "slot101 (4,200,503B)",
+      "slot102 (4,419,779B)"
+    ],
+    "ui_parity": "Launcher desktop 'romance' button group and CycleRomance() updated to {1, 2, 3, 5, 10, 999} matching HUD Tab 1, with non-blocking offline save sync when !Running() && !SelfTestMode && !DumpUiMode && !suppressSaveSync."
+  },
+  "latency_and_frame_optimization": {
+    "session_boost_ipc_and_scan": "Removed VirtualProtectEx from caveFling heap writes, added WriteCaveParam shadow cache, throttled ExtFlingRunning/IsCrashHandlerActive to >=3000ms, GetLiveSilverAmount to >=1500ms, IsWorldLoadedAndSettled/working-set refresh to >=2500ms, and full inventory scans to >=12s when silverPtr is valid (GetExitCodeProcess liveness).",
+    "launcher_and_hud": "Removed hardware-cursor polling and periodic 600ms SetWindowPos loop from InGameHudOverlayForm.PollSensors(), reduced toast duration to 1.8s, and shared OpenProcess(0x1000)/GetExitCodeProcess + 2s snapshot throttle in Launcher.Running().",
+    "rsi_engine_and_os": {
+      "active_arm": "FSR59_UltraResponsive",
+      "generation": 142,
+      "scale_display": "59%",
+      "model": "Low",
+      "texture": "High",
+      "water": "Low",
+      "template": "/OS_M_Windows::Low.engineoptiongraphics",
+      "dx12_user_gpu_preferences": "SwapEffectUpgradeEnable=1;GpuPreference=2;"
+    }
+  },
+  "verification": {
+    "build_ps1_rc": 0,
+    "trainer_self_test": "PASS (Gates 1..7 OK, RVA_VERIFY_OK=20/20 + RVA_FRIENDLY_DAILY/RVA_AFFINITY_ADD/RVA_FRIENDLY_ADD)",
+    "dump_ui_audit": "OVERLAP_COUNT=0",
+    "rsi_engine_self_test": "[RSI-SELF-TEST PASS]",
+    "editor_evidence_self_test": "[EDITOR-EVIDENCE-SELF-TEST PASS]",
+    "autoplay_self_test": "[AUTOPLAY-SELF-TEST PASS]",
+    "nvidia_profile_verify": "17/17 Matches=True (Ultra Low Latency=1, Max Pre-Rendered Frames=1, Max FPS=60)",
+    "rsi_watcher_alive": 1
+  }
+}

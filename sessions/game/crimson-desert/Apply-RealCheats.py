@@ -97,11 +97,44 @@ def patch_save_slot(save_path, args, is_latest_main=False):
     type_names = [t.name for t in schema["types"]]
     toc = save_parser.parse_toc(bytes(raw), schema["schema_end"], type_names)
 
+    def _patch_level_and_daily(raw_buf, fields, set_level_10, set_exp_max, reset_daily):
+        rom_cnt = 0
+        daily_cnt = 0
+        for cf in fields or ():
+            if cf.name == "_levelData" and cf.child_fields:
+                r2, d2 = _patch_level_and_daily(
+                    raw_buf, cf.child_fields, set_level_10, set_exp_max, reset_daily
+                )
+                rom_cnt += r2
+                daily_cnt += d2
+            elif cf.name == "_level" and set_level_10 and has_exact_bytes(cf, 4):
+                struct.pack_into("<I", raw_buf, cf.start_offset, 10)
+                rom_cnt += 1
+            elif cf.name == "_exp" and set_exp_max and has_exact_bytes(cf, 8):
+                struct.pack_into("<Q", raw_buf, cf.start_offset, 9999)
+                rom_cnt += 1
+            elif reset_daily and cf.name in (
+                "_gimmickEventDailyCountData",
+                "_actionFrameEventDailyCountData",
+                "_talkEventDailyCountData",
+            ) and cf.child_fields:
+                for df in cf.child_fields:
+                    if df.name == "_dailyCount" and has_exact_bytes(df, 4):
+                        if struct.unpack_from("<I", raw_buf, df.start_offset)[0] != 0:
+                            struct.pack_into("<I", raw_buf, df.start_offset, 0)
+                            daily_cnt += 1
+                    elif df.name == "_lastUpdateTime" and has_exact_bytes(df, 8):
+                        if struct.unpack_from("<Q", raw_buf, df.start_offset)[0] != 0:
+                            struct.pack_into("<Q", raw_buf, df.start_offset, 0)
+                            daily_cnt += 1
+        return rom_cnt, daily_cnt
+
     wanted = {"CharacterStatusSaveData", "InventorySaveData"}
     if args.gear_max or args.all_max:
         wanted.add("EquipmentSaveData")
-    if args.romance_max or args.all_max:
+    if args.romance_max or args.all_max or getattr(args, "reset_friendly_daily", False):
         wanted.add("FieldNPCSaveData")
+        wanted.add("FriendlySaveData")
 
     entries = [e for e in toc["entries"] if e.class_name in wanted]
     objects = save_parser.decode_object_blocks(bytes(raw), entries, schema["types"])
@@ -227,19 +260,43 @@ def patch_save_slot(save_path, args, is_latest_main=False):
                             if stack_boosted > 0:
                                 changes.append(f"소비/재료 아이템 {stack_boosted}종 수량 -> 999개")
 
-        # 4. FieldNPCSaveData (NPC Friendly & Romance Affinity)
-        elif obj.class_name == "FieldNPCSaveData" and (args.romance_max or args.all_max):
-            npc_cnt = 0
+        # 4. FriendlySaveData & FieldNPCSaveData (NPC Friendly, Romance Affinity & Daily Caps)
+        elif obj.class_name == "FriendlySaveData" and (args.romance_max or args.all_max or getattr(args, "reset_friendly_daily", False)):
+            want_romance = bool(args.romance_max or args.all_max)
+            want_daily = bool(want_romance or getattr(args, "reset_friendly_daily", False))
+            rom_cnt = 0
+            daily_cnt = 0
+            for f in obj.fields:
+                if f.name in ("_friendlyDataList", "_affinityDataList") and f.list_elements:
+                    is_affinity = (f.name == "_affinityDataList")
+                    for elem in f.list_elements:
+                        if elem.child_fields:
+                            r2, d2 = _patch_level_and_daily(
+                                raw, elem.child_fields, is_affinity and want_romance, want_romance, want_daily
+                            )
+                            rom_cnt += r2
+                            daily_cnt += d2
+            if rom_cnt > 0:
+                changes.append(f"NPC 호감도·연애 EXP 9,999 ({rom_cnt}필드)")
+            if daily_cnt > 0:
+                changes.append(f"NPC 일일 호감 제한 초기화 ({daily_cnt}필드)")
+        elif obj.class_name == "FieldNPCSaveData" and (args.romance_max or args.all_max or getattr(args, "reset_friendly_daily", False)):
+            want_romance = bool(args.romance_max or args.all_max)
+            want_daily = bool(want_romance or getattr(args, "reset_friendly_daily", False))
+            rom_cnt = 0
+            daily_cnt = 0
             for f in obj.fields:
                 if f.name in ("_friendly", "_affinity") and f.child_fields:
-                    for cf in f.child_fields:
-                        if cf.name == "_level" and has_exact_bytes(cf, 4):
-                            struct.pack_into("<I", raw, cf.start_offset, 10)
-                            npc_cnt += 1
-                        elif cf.name == "_exp" and has_exact_bytes(cf, 8):
-                            struct.pack_into("<Q", raw, cf.start_offset, 9999)
-            if npc_cnt > 0:
+                    is_affinity = (f.name == "_affinity")
+                    r2, d2 = _patch_level_and_daily(
+                        raw, f.child_fields, is_affinity and want_romance, want_romance, want_daily
+                    )
+                    rom_cnt += r2
+                    daily_cnt += d2
+            if rom_cnt > 0:
                 changes.append("NPC 호감도/연애 Lv.10 & EXP 9,999")
+            if daily_cnt > 0:
+                changes.append(f"NPC 필드 일일 제한 초기화 ({daily_cnt}필드)")
 
     if is_latest_main and latest_bag_silver is not None:
         write_silver_cache(latest_bag_silver)
@@ -271,6 +328,7 @@ def main():
     parser.add_argument("--equip-thief-gloves", action="store_true")
     parser.add_argument("--bag-expand", type=int, default=0)
     parser.add_argument("--romance-max", action="store_true")
+    parser.add_argument("--reset-friendly-daily", action="store_true")
     parser.add_argument("--all-max", action="store_true")
     parser.add_argument("--restore", action="store_true")
     parser.add_argument("--query", action="store_true")

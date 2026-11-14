@@ -103,6 +103,9 @@ static class ConfigStore {
 }
 
 internal static class Win32Native {
+    [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint exitCode);
+    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr hObject);
     [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -266,7 +269,6 @@ class InGameHudOverlayForm : Form {
 
         private readonly bool[] wasKeyDown = new bool[256];
         private int ipcPollTick = 0;
-        private int zOrderTick = 0;
         private int pidRefreshTick = 0;
         private int selfPid = 0;
         private int cachedGamePid = 0;
@@ -329,15 +331,10 @@ class InGameHudOverlayForm : Form {
                     }
                 }
 
-                // Refresh CrimsonDesert PID every ~600ms (use owner.cachedGamePid; avoid frequent Process scans)
+                // Reuse Launcher's cached GetExitCodeProcess handle + 2s snapshot throttle
                 if (++pidRefreshTick >= 10) {
                     pidRefreshTick = 0;
-                    cachedGamePid = (int)owner.cachedGamePid;
-                    if (cachedGamePid == 0) {
-                        var gps = Process.GetProcessesByName("CrimsonDesert");
-                        if (gps.Length > 0) cachedGamePid = gps[0].Id;
-                        for (int i = 0; i < gps.Length; i++) gps[i].Dispose();
-                    }
+                    cachedGamePid = (owner != null && owner.Running()) ? (int)owner.cachedGamePid : 0;
                 }
 
                 // Emergency stop check (F12): immediately stops any macro, AutoPlay, and Free-Flight lock
@@ -387,8 +384,8 @@ class InGameHudOverlayForm : Form {
 
                 // Dynamic DWM Independent Flip Unmap Policy:
                 // Unmap the TopMost GDI HUD window whenever the user is actively playing in 3D
-                // (game foreground, hardware cursor hidden, menu closed, no recent toast in last 3.5s)
-                // or whenever switched away to another app. Re-show instantly on menu/cursor/toast.
+                // (game foreground, menu closed, no recent toast in last 1.8s)
+                // or whenever switched away to another app. Re-show cleanly only on menu/toast.
                 if (!Launcher.SelfTestMode && !Launcher.DumpUiMode) {
                     if (!owner.isHudVisible || StealthHideAll || !activeContext) {
                         if (this.Visible) {
@@ -405,9 +402,8 @@ class InGameHudOverlayForm : Form {
                         }
                         Win32Native.ClipCursor(IntPtr.Zero);
                     } else {
-                        bool cursorShowing = Win32Native.IsHardwareCursorVisible();
-                        bool toastActive = (DateTime.UtcNow - lastHudToastUtc).TotalSeconds < 3.5;
-                        bool wantPill = isSelfFg || cursorShowing || toastActive;
+                        bool toastActive = (DateTime.UtcNow - lastHudToastUtc).TotalSeconds < 1.8;
+                        bool wantPill = isSelfFg || toastActive;
                         if (wantPill && !this.Visible) {
                             UpdateFormBounds();
                             this.Visible = true;
@@ -418,13 +414,6 @@ class InGameHudOverlayForm : Form {
                             this.Visible = false;
                             return;
                         }
-                    }
-                }
-
-                if (++zOrderTick >= 10) {
-                    zOrderTick = 0;
-                    if (!StealthHideAll && this.Visible) {
-                        Win32Native.SetWindowPos(this.Handle, (IntPtr)(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
                     }
                 }
             } catch { }
@@ -1255,13 +1244,39 @@ class Launcher : Form {
         return File.Exists(paz0) && (new FileInfo(paz0).Length > 166411120L);
     }
 
-    bool Running() {
-        var list = Process.GetProcessesByName("CrimsonDesert");
-        try {
-            cachedGamePid = list.Length != 0 ? (uint)list[0].Id : 0U;
-            return list.Length != 0;
+    private IntPtr _cachedGameHandle = IntPtr.Zero;
+    private DateTime _lastProcScanUtc = DateTime.MinValue;
+    private readonly object _procCacheLock = new object();
+
+    internal bool Running() {
+        lock (_procCacheLock) {
+            if (_cachedGameHandle != IntPtr.Zero) {
+                uint exitCode;
+                if (Win32Native.GetExitCodeProcess(_cachedGameHandle, out exitCode) && exitCode == 259U) {
+                    return true;
+                }
+                Win32Native.CloseHandle(_cachedGameHandle);
+                _cachedGameHandle = IntPtr.Zero;
+                cachedGamePid = 0U;
+            }
+            DateTime now = DateTime.UtcNow;
+            if (cachedGamePid == 0U && (now - _lastProcScanUtc).TotalSeconds < 2.0) {
+                return false;
+            }
+            _lastProcScanUtc = now;
+            var list = Process.GetProcessesByName("CrimsonDesert");
+            try {
+                if (list.Length != 0) {
+                    int pid = list[0].Id;
+                    cachedGamePid = (uint)pid;
+                    _cachedGameHandle = Win32Native.OpenProcess(0x1000U, false, pid);
+                    return true;
+                }
+                cachedGamePid = 0U;
+                return false;
+            }
+            finally { foreach (var p in list) p.Dispose(); }
         }
-        finally { foreach (var p in list) p.Dispose(); }
     }
 
     public Launcher() {
@@ -1356,6 +1371,12 @@ class Launcher : Form {
                 LiveMemoryCheatEngine.Detach();
             }
             if (inGameHud != null && !inGameHud.IsDisposed) inGameHud.Close();
+            lock (_procCacheLock) {
+                if (_cachedGameHandle != IntPtr.Zero) {
+                    Win32Native.CloseHandle(_cachedGameHandle);
+                    _cachedGameHandle = IntPtr.Zero;
+                }
+            }
             try { boost.Dispose(); } catch { }
         };
         FormClosed += delegate {
@@ -2422,8 +2443,8 @@ class Launcher : Form {
         int y = 4;
         AddSectionTitle(leftCard, "♥ 연애 · NPC 호감도 획득 배율", ref y);
         AddOptionButtonGroup(leftCard, "romance", "♥ 호감도 획득 배율",
-            new[] { "x1기본", "x2수월", "x3추천", "x5쾌속", "즉시MAX" },
-            new object[] { 1, 2, 3, 5, 999 }, romanceMultiplier,
+            new[] { "x1기본", "x2수월", "x3추천", "x5쾌속", "x10배", "즉시MAX" },
+            new object[] { 1, 2, 3, 5, 10, 999 }, romanceMultiplier,
             val => { SetRomanceMultiplier((int)val); }, ref y);
 
         AddSectionTitle(leftCard, "▸ 동물 길들이기(테이밍) 난이도 완화", ref y);
@@ -2600,6 +2621,13 @@ class Launcher : Form {
         romanceMultiplier = m;
         UpdateGroupSelection("romance", m);
         Log(m >= 999 ? "♥ [연애/호감도] NPC 호감도 즉시 100% MAX 해금!" : string.Format("♥ [연애/호감도] 대화/선물 호감도 획득량 x{0}배 적용!", m));
+        if (!SelfTestMode && !DumpUiMode && !_suppressConfigSave && !suppressSaveSync && !Running()) {
+            if (m >= 999) {
+                RunManualSaveCheatAsync("--romance-max", "NPC 호감도·연애 최대치 & 일일 제한 해제 세이브 반영");
+            } else if (m > 1) {
+                RunManualSaveCheatAsync("--reset-friendly-daily", "NPC 일일 호감도 대화·선물 횟수 제한 초기화");
+            }
+        }
         PushCheatStateNow();
         SaveCheatConfig();
         RefreshHud();
@@ -2879,7 +2907,7 @@ class Launcher : Form {
     internal void CycleThiefStealth() { SetThiefStealthMode((thiefStealthMode + 1) % 3); }
     internal void CycleGearHider() { SetGearHiderMode((gearHiderMode + 1) % 4); }
 
-    internal void CycleRomance() { int[] v = { 1, 2, 3, 5, 999 }; int i = Array.IndexOf(v, romanceMultiplier); SetRomanceMultiplier(v[(i + 1) % v.Length]); }
+    internal void CycleRomance() { int[] v = { 1, 2, 3, 5, 10, 999 }; int i = Array.IndexOf(v, romanceMultiplier); SetRomanceMultiplier(v[(i + 1) % v.Length]); }
     internal void CycleTaming() { int[] v = { 1, 2, 3, 5, 999 }; int i = Array.IndexOf(v, tamingMultiplier); SetTamingEase(v[(i + 1) % v.Length]); }
     internal void CycleMountSpeed() { float[] v = { 1.0f, 1.5f, 2.0f, 3.0f, 4.0f }; int idx = 0; for (int i = 0; i < v.Length; i++) if (Math.Abs(v[i] - mountSpeedMultiplier) < 0.05f) idx = i; SetMountSpeed(v[(idx + 1) % v.Length]); }
     internal void CycleUnderwater() { int[] v = { 1, 2, 3, 5, 999 }; int i = Array.IndexOf(v, underwaterOxygenMultiplier); SetUnderwaterOxygen(v[(i + 1) % v.Length]); }

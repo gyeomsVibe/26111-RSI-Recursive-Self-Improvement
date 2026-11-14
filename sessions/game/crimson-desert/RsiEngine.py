@@ -66,7 +66,7 @@ os.makedirs(RSI_DIR, exist_ok=True)
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
 VALID_FSR_SCALES = ("AA", "67%", "59%")
-VALID_QUALITY_LEVELS = ("Medium", "High")
+VALID_QUALITY_LEVELS = ("Low", "Medium", "High")
 
 # Verified discrete BlackSpace Engine tuning arms (safe GTX 1070 8GB Pareto frontier)
 ARMS = {
@@ -109,6 +109,16 @@ ARMS = {
         "water": "Medium",
         "clarity_bonus": 8.5,
         "vram_est_mb": 3950,
+    },
+    "FSR59_UltraResponsive": {
+        "arm_id": "FSR59_UltraResponsive",
+        "label": "FSR 3.1 Balanced(59%) 초저지연 반응성 마스터 (Low 모델·물 / High 텍스처)",
+        "scale_display": "59%",
+        "texture": "High",
+        "model": "Low",
+        "water": "Low",
+        "clarity_bonus": 9.0,
+        "vram_est_mb": 4300,
     },
 }
 
@@ -193,6 +203,8 @@ def detect_arm_from_params(params):
     sc = params.get("scale_display", "AA")
     tex = params.get("texture", "Medium")
     wat = params.get("water", "High")
+    if sc == "59%":
+        return "FSR59_UltraResponsive"
     if sc == "AA":
         return "AA_BalancedWater" if wat == "Medium" else "AA_UltraSharp"
     return "FSR67_QualityHigh" if tex == "High" else "FSR67_CombatLock"
@@ -816,7 +828,12 @@ def evolve_parameters(state, metrics):
             # Evidence-grounded contextual physics prior
             ctx_bonus = 0.0
             if bottleneck == "GPU_SHADER_BOUND":
-                if cand_rank < curr_rank:
+                if cand_rank == 0:
+                    if curr_rank == 2:
+                        ctx_bonus += 11.0
+                    elif curr_arm == "FSR67_CombatLock" or (curr_rank == 1 and mean_fps < 31.5):
+                        ctx_bonus += 16.5
+                elif cand_rank < curr_rank:
                     # Downscaling resolution cuts GPU fragment shader load by ~55%
                     if spec["texture"] == "High" and peak_vram < 5800.0:
                         ctx_bonus += 16.0  # Upgrade Texture to High using 4GB+ free VRAM headroom!
@@ -926,9 +943,10 @@ def update_xml_preset(xml_path, params):
         f'<EnumSelectResolutionScale Name="_upscaleResolution" _select="{scale}" />',
         content,
     )
+    target_tpl = "Low" if params.get("model") == "Low" else "Medium"
     content = re.sub(
-        r'Template="/OS_M_Windows::Low\.engineoptiongraphics"',
-        'Template="/OS_M_Windows::Medium.engineoptiongraphics"',
+        r'Template="/OS_M_Windows::(?:Low|Medium|High)\.engineoptiongraphics"',
+        f'Template="/OS_M_Windows::{target_tpl}.engineoptiongraphics"',
         content,
     )
     tag_map = {
@@ -1468,6 +1486,8 @@ def run_self_test():
         valid_xml = os.path.join(tmpd, "valid.xml")
         shutil.copyfile(MASTER_PROFILE, valid_xml)
         update_xml_preset(valid_xml, build_arm_params("FSR67_QualityHigh"))
+        assert validate_xml_strict(valid_xml) is True
+        update_xml_preset(valid_xml, build_arm_params("FSR59_UltraResponsive"))
         assert validate_xml_strict(valid_xml) is True
 
         rejected = False
