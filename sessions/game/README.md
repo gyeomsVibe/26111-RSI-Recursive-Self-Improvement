@@ -19,11 +19,14 @@
 
 ```bash
 python sessions/game/crimson-desert/EditorEvidence.py --self-test
-python -m py_compile sessions/game/crimson-desert/RsiEngine.py sessions/game/crimson-desert/RsiWatcher.py sessions/game/crimson-desert/EditorEvidence.py
+python sessions/game/crimson-desert/CrimsonAutoPlayEngine.py --self-test
+python sessions/game/crimson-desert/RsiEngine.py --self-test
+python -m py_compile sessions/game/crimson-desert/CrimsonAutoPlayEngine.py sessions/game/crimson-desert/RsiEngine.py sessions/game/crimson-desert/RsiWatcher.py sessions/game/crimson-desert/EditorEvidence.py
 ```
 
 ## Crimson Desert 실측 요약 (2026-11-14)
 
-- 분석 에디터 로그: 4개 세션 (`hooked_sites_count: 18`, `verified_keys_count: 26`, `ineffective_keys: []`)
-- 채택 기본 프리셋: `FSR67_QualityHigh` (3회 평가, EWMA 보상 `68.42`, 최근 `39.27 FPS`, `P99 30.96ms`, `crashes: 0`)
-- 상세 감사 리포트: [`crimson-desert/evidence/user_live_tab_audit_20261114.json`](./crimson-desert/evidence/user_live_tab_audit_20261114.json)
+- 분석 에디터 로그: 5개 세션 (`hooked_sites_count: 18`, `verified_keys_count: 27`, `ineffective_keys: []`)
+- 채택 기본 프리셋: `FSR67_QualityHigh` (Gen `#141` `PRESERVE_LIVE_XML`, `67%`/Texture·Model·Water `High`, `crashes: 0`; U08 HUD 전수 실험 세션 실측 `30.75 FPS`, P99 `46.38ms`, `1921` frames)
+- 인게임 HUD 전수 실험(U07/U08): 상단 바 `7/7`, 탭 헤더 `4/4`, 행 버튼 `129/129` (`140/140`, `failed_buttons: []`), `"자가 테스트 실시"` 엄격 게이트 + `WH_KEYBOARD_LL` 물리 입력 즉시 중단 + `ClipCursor(None)` 원자적 `SendInput` + 세이브/XML `20/20` 무결성 유지
+- 상세 감사 리포트: [`crimson-desert/evidence/user_live_tab_audit_20261114.json`](./crimson-desert/evidence/user_live_tab_audit_20261114.json), [`crimson-desert/evidence/all_tabs_live_experiment_20261114.json`](./crimson-desert/evidence/all_tabs_live_experiment_20261114.json)

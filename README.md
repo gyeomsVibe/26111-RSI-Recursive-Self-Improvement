@@ -14,16 +14,18 @@
         ├── schema/
         │   └── unified_game_rsi.schema.json
         └── crimson-desert/
-            ├── RsiEngine.py         # UCB1 밴딧 + PresentMon v2 + watermark_mtime 가드
-            ├── RsiWatcher.py        # 5초 데몬 감시 + 게임 시작 시 Ollama 자원 즉시 해제
-            ├── EditorEvidence.py    # 18개 훅 사이트·26개 실시간 에디터 키 교차검증 (--self-test)
+            ├── CrimsonAutoPlayEngine.py # "자가 테스트 실시" 트리거 + WH_KEYBOARD_LL 비상중단 + HUD 140/140 전수검증
+            ├── RsiEngine.py         # UCB1 밴딧 + PresentMon v2 + --preserve-live-xml + rollback 정밀복구
+            ├── RsiWatcher.py        # 5초 데몬 감시 + 자가테스트 XML 보호 + 게임 시작 시 Ollama 즉시 해제
+            ├── EditorEvidence.py    # 18개 훅 사이트·27개 실시간 에디터 키 교차검증 (--self-test)
             ├── CdRecorder.cs        # 실시간 에디터 메모리 훅·트램폴린·FLiNG 양보(12초 유예)
             ├── DriverPolicy.ps1     # GTX 1070 드라이버 정책 감사·적용 스크립트
             ├── Apply-NvidiaProfile.ps1 # 17개 샤프/저지연 NVIDIA 드라이버 프로파일 적용·검증
             └── evidence/
                 ├── unified_game_rsi_summary.json
                 ├── editor_evidence.json
-                └── user_live_tab_audit_20261114.json
+                ├── user_live_tab_audit_20261114.json
+                └── all_tabs_live_experiment_20261114.json
 ```
 
 ## 현재 진행 현황 (2026-11-14 기준)
@@ -43,6 +45,12 @@
 - **한 박자 렉(1-Beat Lag) 제거**: 핫 경로의 외부 Python 서브프로세스 반복 호출을 제거하고 네이티브 직접 읽기로 전환하여 `Apply-RealCheats` 백그라운드 프로세스 `0`개를 유지합니다.
 - **GTX 1070 고화질 선명도/안정성 최적화**: `FSR67_QualityHigh` 프리셋(67% 스케일 / Texture·Model·Water High, 실측 `39.27 FPS`, `P99 30.96ms`, `EWMA 보상 68.42점`, `crashes: 0`) 및 NVIDIA 17개 샤프/저지연 설정(`17/17 Matches=True`)을 기본 채택했습니다.
 - **중복 진화(Replay) 방지**: `RsiEngine.py`에 `watermark_mtime` 단조 증가 가드를 추가하여 과거 CSV 재평가(`Gen #137~#139`) 루프를 차단했습니다.
+
+### 3. U07·U08 자가테스트 격리 및 인게임 HUD 전수 실험 (2026-11-14 저녁)
+- **조작권 탈취 차단(U07)**: `"자가 테스트 실시"` 트리거(`ValidateTriggerPhrase`)가 없으면 자율 시연 및 HUD IPC를 차단(exit `2`)하며, 물리 키보드 입력 감지 시 `WH_KEYBOARD_LL` 후크로 2초 이내 즉시 중단·해제합니다.
+- **`ClipCursor` 클릭 좌표 복구(U08)**: 게임 3D 활성 시 `ClipCursor(0,0,0,0)` 스냅을 `ClipCursor(None)` + `SetCursorPos` + 원자적 `SendInput` 3-이벤트 배치로 우회하여 포커스(`WS_EX_NOACTIVATE`)를 유지한 채 HUD 클릭을 100% 정상화했습니다.
+- **인게임 마스터 허브 HUD 140/140 전수 검증**: 상단 바 `7/7`, 탭 헤더 `4/4`, 4개 탭 25개 행 `129/129` 버튼(`failed_buttons: []`), PresentMon `1921` 프레임(평균 `30.75 FPS`, P99 `46.38ms`, GPU Busy `32.41ms`, VRAM 피크 `4344 MB`, RAM 피크 `5276.3 MB`, GPU `54 C`)을 실측했습니다.
+- **사용자 XML 보존 레이스 가드**: `Launcher` 종료 감시, `RsiWatcher.py`, `RsiEngine.py --preserve-live-xml`이 자가테스트 중 고화질 XML(`FSR67_QualityHigh`)을 보호(`PRESERVE_LIVE_XML`, 세이브 `20/20` SHA-256 `DIFF_COUNT=0`)하도록 일관화했습니다 (`editor_evidence`: 5개 세션, 18개 훅 사이트, 27개 검증 키, `ineffective_keys: []`).
 
 ## 라이선스
 본 저장소는 [MIT License](./LICENSE)를 따릅니다.

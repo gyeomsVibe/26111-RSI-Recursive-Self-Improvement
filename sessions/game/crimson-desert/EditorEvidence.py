@@ -27,24 +27,30 @@ REACT_WINDOW = 10.0
 # Map each INI key in the 25-row v2 schema to expected hook sites and CAVE fields.
 KEY_SPECS = {
     "DefensePreset":               {"sites": ["PLAYER", "DEFENSE", "STATS", "COMMIT"], "cave_fields": ["def", "god"]},
+    "DamageTakenMode":             {"sites": ["PLAYER", "DEFENSE", "STATS", "COMMIT"], "cave_fields": ["def", "god"]},
     "DamagePreset":                {"sites": ["PLAYER", "DMG"],                        "cave_fields": ["dmg"]},
+    "DamageDealtMultiplier":       {"sites": ["PLAYER", "DMG"],                        "cave_fields": ["dmg"]},
     "PlayerStaminaMode":           {"sites": ["PLAYER", "STATS", "COMMIT"],            "cave_fields": ["sta"]},
     "SkillCooldownMode":           {"sites": ["PLAYER", "STATS", "COMMIT"],            "cave_fields": ["cd"]},
+    "CooldownMode":                {"sites": ["PLAYER", "STATS", "COMMIT"],            "cave_fields": ["cd"]},
     "ExpMultiplier":               {"sites": ["EXP"],                                  "cave_fields": ["exp"]},
     "MovementSpeed":               {"sites": ["KISS"],                                 "cave_fields": ["kissMult"]},
+    "SpeedMultiplier":             {"sites": ["KISS"],                                 "cave_fields": ["kissMult"]},
     "JumpMultiplier":              {"sites": ["KISS"],                                 "cave_fields": ["jumpSc"]},
     "RomanceAffectionMultiplier":  {"sites": ["ROMANCE_TRUST"],                        "cave_fields": ["rom"]},
+    "RomanceMultiplier":           {"sites": ["ROMANCE_TRUST"],                        "cave_fields": ["rom"]},
     "TamingMultiplier":            {"sites": ["HORSE_TAMING"],                         "cave_fields": ["tame"]},
     "MountSpeedMultiplier":        {"sites": ["PLAYER", "STATS", "KISS"],              "cave_fields": ["mspd", "kissMult"]},
     "MountStaminaMode":            {"sites": ["PLAYER", "STATS", "COMMIT"],            "cave_fields": ["msta"]},
     "UnderwaterOxygenMultiplier":  {"sites": ["BREATH_VITALS"],                        "cave_fields": ["breath"]},
     "UnderwaterSpeed":             {"sites": ["KISS", "BREATH_VITALS"],                "cave_fields": ["swim"]},
     "CraftCostMode":               {"sites": ["SAVE_ITEM", "COUNT_ITEMS"],             "cave_fields": ["craftCost"]},
-    "CraftSuccessMultiplier":      {"sites": [],                                       "cave_fields": ["craftSucc"]},
+    "CraftSuccessMultiplier":      {"sites": ["SAVE_ITEM", "COUNT_ITEMS"],             "cave_fields": ["craftSucc"]},
     "DurabilityMode":              {"sites": ["DURABILITY"],                           "cave_fields": ["dur"]},
     "GearHiderMode":               {"sites": [],                                       "cave_fields": ["gear"]},
     "WeaponImbueMode":             {"sites": ["PLAYER", "DMG", "STATS"],               "cave_fields": ["imbue"]},
     "PendingAddSilver":            {"sites": ["SAVE_ITEM", "SELECTED_ITEM"],           "cave_fields": []},
+    "ThiefStealthMode":            {"sites": ["CRIME_EVAL", "WANTED_EVAL"],            "cave_fields": ["thiefDet", "pick", "bounty"]},
     "ThiefDetectionMode":          {"sites": ["CRIME_EVAL"],                           "cave_fields": ["thiefDet"]},
     "PickpocketSuccessMode":       {"sites": ["CRIME_EVAL"],                           "cave_fields": ["pick"]},
     "BountyImmunityMode":          {"sites": ["CRIME_EVAL", "WANTED_EVAL"],            "cave_fields": ["bounty"]},
@@ -310,11 +316,13 @@ def run_self_test():
         sample = os.path.join(td, "session_selftest.log")
         lines = [
             "12:00:00.000\tSTART\trecorder_v2 pid=1234 ini=test.ini",
-            "12:00:01.000\tSITES\tPLAYER=VANILLA EXP=VANILLA DURABILITY=VANILLA",
-            "12:00:02.000\tCAVE\tcf=0x211D0000 player=0x11223344 silver=50000 staPtr=0x2233 spiPtr=0x3344 exp=1 dur=0",
+            "12:00:01.000\tSITES\tPLAYER=VANILLA EXP=VANILLA DEFENSE=VANILLA STATS=VANILLA DURABILITY=VANILLA",
+            "12:00:02.000\tCAVE\tcf=0x211D0000 player=0x11223344 silver=50000 staPtr=0x2233 spiPtr=0x3344 exp=1 def=0 cd=0 dur=0",
             "12:00:03.000\tTOGGLE\tExpMultiplier: 1 -> 5",
-            "12:00:04.500\tSITES\tPLAYER=VANILLA EXP=HOOKED DURABILITY=VANILLA",
-            "12:00:05.000\tCAVE\tcf=0x211D0000 player=0x11223344 silver=50000 staPtr=0x2233 spiPtr=0x3344 exp=5 dur=0",
+            "12:00:03.200\tTOGGLE\tDamageTakenMode: 0 -> 4",
+            "12:00:03.400\tTOGGLE\tCooldownMode: 0 -> 4",
+            "12:00:04.500\tSITES\tPLAYER=VANILLA EXP=HOOKED DEFENSE=HOOKED STATS=HOOKED DURABILITY=VANILLA",
+            "12:00:05.000\tCAVE\tcf=0x211D0000 player=0x11223344 silver=50000 staPtr=0x2233 spiPtr=0x3344 exp=5 def=4 cd=4 dur=0",
             "12:00:06.000\tHITS\tcommit=10 dur=0",
             "12:00:07.000\tTOGGLE\tDurabilityMode: 0 -> 4",
             # No reaction for DurabilityMode -> should appear in ineffective_keys
@@ -326,6 +334,8 @@ def run_self_test():
         assert "EXP" in res["hooked_sites_ever"], "EXP site missing"
         assert res["cave_pointer_health"]["player_ptr_valid"] is True, "player ptr check failed"
         assert "ExpMultiplier" in res["verified_keys"], "ExpMultiplier should be verified"
+        assert "DamageTakenMode" in res["verified_keys"], "DamageTakenMode v2 key should be verified"
+        assert "CooldownMode" in res["verified_keys"], "CooldownMode v2 key should be verified"
         assert "DurabilityMode" in res["ineffective_keys"], "DurabilityMode should be marked ineffective"
     print("[EDITOR-EVIDENCE-SELF-TEST PASS]")
     return 0

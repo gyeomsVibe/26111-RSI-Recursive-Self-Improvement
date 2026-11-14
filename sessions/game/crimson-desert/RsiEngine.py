@@ -606,6 +606,24 @@ def analyze_unprocessed_sessions(state, sessions_dir=SESSIONS_DIR, rsi_dir=RSI_D
         gpu_temps.extend(gdata["gpu_temps"])
         gpu_clocks.extend(gdata["gpu_clocks"])
 
+    if not vram_used:
+        ap_report = os.path.join(RSI_DIR, "auto_play_final_report.json")
+        if os.path.exists(ap_report):
+            try:
+                ref_files = valid_pm_files or companion_gpu
+                ref_mtime = max((os.path.getmtime(p) for p in ref_files if os.path.exists(p)), default=time.time())
+                if abs(os.path.getmtime(ap_report) - ref_mtime) <= 900.0:
+                    with open(ap_report, "r", encoding="utf-8", errors="replace") as af:
+                        ap = json.load(af)
+                    if float(ap.get("peak_vram_mb", 0.0) or 0.0) > 0.0:
+                        vram_used.append(float(ap["peak_vram_mb"]))
+                    if not ram_used and float(ap.get("peak_ram_mb", 0.0) or 0.0) > 0.0:
+                        ram_used.append(float(ap["peak_ram_mb"]))
+                    if not gpu_temps and float(ap.get("peak_gpu_temp_c", 0.0) or 0.0) > 0.0:
+                        gpu_temps.append(float(ap["peak_gpu_temp_c"]))
+            except Exception:
+                pass
+
     telemetry_source = "presentmon_v2"
     if not intervals:
         # Strict fallback only when NO real PresentMon frame file was produced
@@ -1106,14 +1124,15 @@ def apply_pending_if_idle(state=None):
         return _apply_pending_if_idle_unlocked(st)
 
 
-def run_rsi_cycle():
+def run_rsi_cycle(preserve_live_xml=False):
     with _RsiMutex():
-        return _run_rsi_cycle_unlocked()
+        return _run_rsi_cycle_unlocked(preserve_live_xml=preserve_live_xml)
 
 
-def _run_rsi_cycle_unlocked():
+def _run_rsi_cycle_unlocked(preserve_live_xml=False):
     state = load_state()
-    _apply_pending_if_idle_unlocked(state)
+    if not preserve_live_xml:
+        _apply_pending_if_idle_unlocked(state)
 
     metrics, marked_names = analyze_unprocessed_sessions(state, limit_frames=1)
     if not metrics:
@@ -1130,7 +1149,23 @@ def _run_rsi_cycle_unlocked():
 
     gen = int(state.get("current_generation", 1)) + 1
     decision = evolve_parameters(state, metrics)
-    new_params = decision["new_params"]
+    if preserve_live_xml:
+        cur_arm = state.get("active_arm", DEFAULT_ARM_ID)
+        new_params = state.get("active_parameters", build_arm_params(cur_arm))
+        decision["next_arm"] = cur_arm
+        decision["new_params"] = new_params
+        decision["switched"] = False
+        decision["decision_mode"] = "PRESERVE_LIVE_XML"
+        decision["actions"] = [
+            (
+                f"[자가테스트 XML 보존] '{cur_arm}' 유지 (HUD 전수 실험 오버레이 부하 세션 — 사용자 고화질 XML 변경 생략)"
+                if isinstance(a, str) and a.startswith("[자율 진화 전환]")
+                else a
+            )
+            for a in decision.get("actions", [])
+        ]
+    else:
+        new_params = decision["new_params"]
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     snapshot_name = f"Gen_{gen - 1:04d}_{ts}.xml"
@@ -1138,13 +1173,16 @@ def _run_rsi_cycle_unlocked():
     if os.path.exists(MASTER_PROFILE):
         shutil.copyfile(MASTER_PROFILE, snapshot_path)
 
-    update_xml_preset(MASTER_PROFILE, new_params)
     game_running = is_game_running()
-    if game_running:
-        state["pending_apply_on_exit"] = decision["switched"] or state.get("pending_apply_on_exit", False)
-    elif os.path.exists(LIVE_CONFIG):
-        update_xml_preset(LIVE_CONFIG, new_params)
+    if preserve_live_xml:
         state["pending_apply_on_exit"] = False
+    else:
+        update_xml_preset(MASTER_PROFILE, new_params)
+        if game_running:
+            state["pending_apply_on_exit"] = decision["switched"] or state.get("pending_apply_on_exit", False)
+        elif os.path.exists(LIVE_CONFIG):
+            update_xml_preset(LIVE_CONFIG, new_params)
+            state["pending_apply_on_exit"] = False
 
     gen_record = {
         "generation": gen,
@@ -1186,7 +1224,11 @@ def _run_rsi_cycle_unlocked():
     save_state(state)
     export_unified_game_rsi_snapshot(state, gen_record)
 
-    live_apply_note = "즉시 실게임 XML 적용 완료" if not game_running else "게임 실행 중 — 종료 시 자동 실게임 XML 반영 예약됨"
+    live_apply_note = (
+        "자가테스트 HUD 시연 보호 모드 — 사용자 고화질 XML(FSR67_QualityHigh) 보존"
+        if preserve_live_xml
+        else ("즉시 실게임 XML 적용 완료" if not game_running else "게임 실행 중 — 종료 시 자동 실게임 XML 반영 예약됨")
+    )
     report_content = f"""# Crimson Desert RSI v4 자율 최적화 리포트 (Generation #{gen})
 
 - **생성 시각**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -1287,6 +1329,37 @@ def rollback_generation():
         if history:
             state["active_parameters"] = history[-1].get("parameters", build_arm_params(DEFAULT_ARM_ID))
             state["active_arm"] = detect_arm_from_params(state["active_parameters"])
+
+        popped_files = last_gen.get("processed_files") or []
+        still_used = {f for h in history for f in (h.get("processed_files") or [])}
+        removable = {f for f in popped_files if f not in still_used}
+        if removable and isinstance(state.get("processed_csvs"), list):
+            state["processed_csvs"] = [f for f in state["processed_csvs"] if f not in removable]
+
+        primary_file = (last_gen.get("metrics") or {}).get("primary_file")
+        check_files = [primary_file] if primary_file else popped_files
+        popped_mtimes = []
+        for fname in check_files:
+            if not fname:
+                continue
+            sp = os.path.join(SESSIONS_DIR, os.path.basename(str(fname)))
+            if os.path.exists(sp):
+                try:
+                    popped_mtimes.append(float(os.path.getmtime(sp)))
+                except Exception:
+                    pass
+        if popped_mtimes:
+            target_mt = max(popped_mtimes)
+            wm = float(state.get("watermark_mtime", 0.0) or 0.0)
+            if wm <= 0.0 or target_mt <= wm:
+                state["watermark_mtime"] = target_mt - 1.0
+
+        state["total_analyzed_sessions"] = max(0, int(state.get("total_analyzed_sessions", 1)) - 1)
+        arm_before = last_gen.get("arm_before")
+        arm_stats = state.get("arm_stats")
+        if arm_before and isinstance(arm_stats, dict) and isinstance(arm_stats.get(arm_before), dict):
+            arm_stats[arm_before]["pulls"] = max(0, int(arm_stats[arm_before].get("pulls", 0)) - 1)
+
         save_state(state)
         return True
 
@@ -1515,7 +1588,7 @@ def run_self_test_tail_and_parallel():
 if __name__ == "__main__":
     cmd = sys.argv[1].lower() if len(sys.argv) > 1 else ""
     if cmd in ("--evolve", "-e"):
-        run_rsi_cycle()
+        run_rsi_cycle(preserve_live_xml=("--preserve-live-xml" in [a.lower() for a in sys.argv[2:]]))
     elif cmd in ("--apply-pending",):
         apply_pending_if_idle(load_state())
     elif cmd == "--export-unified":

@@ -1,18 +1,6 @@
 {
-  "updated": "2026-11-14T15:05:24",
+  "updated": "2026-11-14T19:24:11",
   "sessions": [
-    {
-      "file": "session_20261114-132532.log",
-      "v2": true,
-      "events": 225,
-      "toggles": 62
-    },
-    {
-      "file": "session_20261114-140012.log",
-      "v2": true,
-      "events": 882,
-      "toggles": 0
-    },
     {
       "file": "session_20261114_124222.log",
       "v2": true,
@@ -24,9 +12,27 @@
       "v2": true,
       "events": 257,
       "toggles": 62
+    },
+    {
+      "file": "session_20261114_182908_u08_alltabs.log",
+      "v2": true,
+      "events": 230,
+      "toggles": 19
+    },
+    {
+      "file": "session_20261114_190216_u08_alltabs.log",
+      "v2": true,
+      "events": 282,
+      "toggles": 138
+    },
+    {
+      "file": "session_20261114_191152_u08_alltabs.log",
+      "v2": true,
+      "events": 238,
+      "toggles": 91
     }
   ],
-  "total_session_logs": 4,
+  "total_session_logs": 5,
   "hooked_sites_ever": [
     "BREATH_VITALS",
     "COMMIT",
@@ -59,18 +65,18 @@
     "commit_max_delta": 2,
     "dur": 0,
     "dur_max_delta": 0,
-    "crime": 0,
-    "crime_max_delta": 0,
-    "tame": 31092,
-    "tame_max_delta": 31092,
-    "breath": 95829,
-    "breath_max_delta": 95829,
+    "crime": 224,
+    "crime_max_delta": 224,
+    "tame": 186,
+    "tame_max_delta": 186,
+    "breath": 838,
+    "breath_max_delta": 838,
     "slot": 0,
     "slot_max_delta": 0,
-    "save": 529,
-    "save_max_delta": 529,
-    "sel": 13,
-    "sel_max_delta": 13,
+    "save": 0,
+    "save_max_delta": 0,
+    "sel": 1007220,
+    "sel_max_delta": 1007220,
     "rom": 0,
     "rom_max_delta": 0,
     "cnt": 0,
@@ -80,238 +86,247 @@
   },
   "keys": {
     "DamageTakenMode": {
-      "toggles": 17,
-      "reacted": 16,
-      "site_reacted": 16,
-      "cave_reacted": 16,
-      "non_default_toggles": 14,
+      "toggles": 25,
+      "reacted": 24,
+      "site_reacted": 24,
+      "cave_reacted": 23,
+      "non_default_toggles": 17,
       "world_attached_toggles": 16,
-      "rate": 0.94
+      "rate": 0.96
     },
     "DamageDealtMultiplier": {
-      "toggles": 13,
-      "reacted": 13,
-      "site_reacted": 13,
-      "cave_reacted": 13,
-      "non_default_toggles": 8,
+      "toggles": 18,
+      "reacted": 18,
+      "site_reacted": 18,
+      "cave_reacted": 18,
+      "non_default_toggles": 12,
       "world_attached_toggles": 12,
       "rate": 1.0
     },
     "PlayerStaminaMode": {
+      "toggles": 16,
+      "reacted": 15,
+      "site_reacted": 15,
+      "cave_reacted": 12,
+      "non_default_toggles": 10,
+      "world_attached_toggles": 14,
+      "rate": 0.94
+    },
+    "CooldownMode": {
+      "toggles": 19,
+      "reacted": 19,
+      "site_reacted": 17,
+      "cave_reacted": 19,
+      "non_default_toggles": 11,
+      "world_attached_toggles": 17,
+      "rate": 1.0
+    },
+    "ExpMultiplier": {
+      "toggles": 18,
+      "reacted": 17,
+      "site_reacted": 17,
+      "cave_reacted": 17,
+      "non_default_toggles": 12,
+      "world_attached_toggles": 16,
+      "rate": 0.94
+    },
+    "SpeedMultiplier": {
+      "toggles": 16,
+      "reacted": 16,
+      "site_reacted": 15,
+      "cave_reacted": 13,
+      "non_default_toggles": 10,
+      "world_attached_toggles": 14,
+      "rate": 1.0
+    },
+    "JumpMultiplier": {
+      "toggles": 15,
+      "reacted": 15,
+      "site_reacted": 14,
+      "cave_reacted": 15,
+      "non_default_toggles": 9,
+      "world_attached_toggles": 13,
+      "rate": 1.0
+    },
+    "RomanceMultiplier": {
+      "toggles": 14,
+      "reacted": 11,
+      "site_reacted": 11,
+      "cave_reacted": 11,
+      "non_default_toggles": 9,
+      "world_attached_toggles": 12,
+      "rate": 0.79
+    },
+    "TamingMultiplier": {
+      "toggles": 12,
+      "reacted": 10,
+      "site_reacted": 10,
+      "cave_reacted": 7,
+      "non_default_toggles": 7,
+      "world_attached_toggles": 10,
+      "rate": 0.83
+    },
+    "MountSpeedMultiplier": {
+      "toggles": 16,
+      "reacted": 15,
+      "site_reacted": 15,
+      "cave_reacted": 15,
+      "non_default_toggles": 9,
+      "world_attached_toggles": 14,
+      "rate": 0.94
+    },
+    "MountStaminaMode": {
+      "toggles": 10,
+      "reacted": 9,
+      "site_reacted": 8,
+      "cave_reacted": 9,
+      "non_default_toggles": 5,
+      "world_attached_toggles": 8,
+      "rate": 0.9
+    },
+    "UnderwaterOxygenMultiplier": {
+      "toggles": 10,
+      "reacted": 7,
+      "site_reacted": 7,
+      "cave_reacted": 7,
+      "non_default_toggles": 5,
+      "world_attached_toggles": 8,
+      "rate": 0.7
+    },
+    "UnderwaterSpeed": {
       "toggles": 9,
+      "reacted": 8,
+      "site_reacted": 8,
+      "cave_reacted": 5,
+      "non_default_toggles": 5,
+      "world_attached_toggles": 9,
+      "rate": 0.89
+    },
+    "CraftCostMode": {
+      "toggles": 10,
+      "reacted": 10,
+      "site_reacted": 10,
+      "cave_reacted": 10,
+      "non_default_toggles": 4,
+      "world_attached_toggles": 8,
+      "rate": 1.0
+    },
+    "CraftSuccessMultiplier": {
+      "toggles": 9,
+      "reacted": 9,
+      "site_reacted": 9,
+      "cave_reacted": 9,
+      "non_default_toggles": 5,
+      "world_attached_toggles": 7,
+      "rate": 1.0
+    },
+    "DurabilityMode": {
+      "toggles": 8,
+      "reacted": 8,
+      "site_reacted": 8,
+      "cave_reacted": 8,
+      "non_default_toggles": 4,
+      "world_attached_toggles": 6,
+      "rate": 1.0
+    },
+    "GearHiderMode": {
+      "toggles": 10,
+      "reacted": 10,
+      "site_reacted": 10,
+      "cave_reacted": 8,
+      "non_default_toggles": 2,
+      "world_attached_toggles": 6,
+      "rate": 1.0
+    },
+    "WeaponImbueMode": {
+      "toggles": 14,
+      "reacted": 14,
+      "site_reacted": 14,
+      "cave_reacted": 14,
+      "non_default_toggles": 8,
+      "world_attached_toggles": 12,
+      "rate": 1.0
+    },
+    "PendingAddSilver": {
+      "toggles": 1,
+      "reacted": 1,
+      "site_reacted": 1,
+      "cave_reacted": 1,
+      "non_default_toggles": 1,
+      "world_attached_toggles": 1,
+      "rate": 1.0
+    },
+    "ThiefDetectionMode": {
+      "toggles": 12,
+      "reacted": 8,
+      "site_reacted": 8,
+      "cave_reacted": 6,
+      "non_default_toggles": 5,
+      "world_attached_toggles": 6,
+      "rate": 0.67
+    },
+    "PickpocketSuccessMode": {
+      "toggles": 12,
+      "reacted": 8,
+      "site_reacted": 8,
+      "cave_reacted": 6,
+      "non_default_toggles": 6,
+      "world_attached_toggles": 6,
+      "rate": 0.67
+    },
+    "BountyImmunityMode": {
+      "toggles": 12,
       "reacted": 8,
       "site_reacted": 8,
       "cave_reacted": 8,
       "non_default_toggles": 6,
-      "world_attached_toggles": 9,
-      "rate": 0.89
-    },
-    "CooldownMode": {
-      "toggles": 13,
-      "reacted": 13,
-      "site_reacted": 13,
-      "cave_reacted": 13,
-      "non_default_toggles": 8,
-      "world_attached_toggles": 13,
-      "rate": 1.0
-    },
-    "ExpMultiplier": {
-      "toggles": 6,
-      "reacted": 6,
-      "site_reacted": 6,
-      "cave_reacted": 6,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 1.0
-    },
-    "SpeedMultiplier": {
-      "toggles": 6,
-      "reacted": 6,
-      "site_reacted": 6,
-      "cave_reacted": 6,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 1.0
-    },
-    "JumpMultiplier": {
-      "toggles": 6,
-      "reacted": 6,
-      "site_reacted": 5,
-      "cave_reacted": 6,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 1.0
-    },
-    "RomanceMultiplier": {
-      "toggles": 6,
-      "reacted": 6,
-      "site_reacted": 6,
-      "cave_reacted": 6,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 1.0
-    },
-    "TamingMultiplier": {
-      "toggles": 6,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 3,
       "world_attached_toggles": 6,
       "rate": 0.67
     },
-    "MountSpeedMultiplier": {
-      "toggles": 6,
-      "reacted": 5,
-      "site_reacted": 5,
-      "cave_reacted": 5,
+    "ThiefGloveFenceMode": {
+      "toggles": 13,
+      "reacted": 9,
+      "site_reacted": 7,
+      "cave_reacted": 9,
       "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 0.83
+      "world_attached_toggles": 7,
+      "rate": 0.69
     },
-    "MountStaminaMode": {
-      "toggles": 6,
-      "reacted": 5,
-      "site_reacted": 3,
-      "cave_reacted": 5,
+    "BagExpandSlots": {
+      "toggles": 14,
+      "reacted": 14,
+      "site_reacted": 14,
+      "cave_reacted": 14,
+      "non_default_toggles": 8,
+      "world_attached_toggles": 12,
+      "rate": 1.0
+    },
+    "SpecialConvenienceMode": {
+      "toggles": 9,
+      "reacted": 6,
+      "site_reacted": 4,
+      "cave_reacted": 6,
       "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 0.83
+      "world_attached_toggles": 7,
+      "rate": 0.67
     },
-    "UnderwaterOxygenMultiplier": {
-      "toggles": 6,
-      "reacted": 5,
-      "site_reacted": 5,
-      "cave_reacted": 5,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 0.83
-    },
-    "UnderwaterSpeed": {
-      "toggles": 6,
-      "reacted": 5,
-      "site_reacted": 5,
-      "cave_reacted": 5,
-      "non_default_toggles": 3,
-      "world_attached_toggles": 6,
-      "rate": 0.83
-    },
-    "CraftCostMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "CraftSuccessMultiplier": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "DurabilityMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "GearHiderMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 0,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "WeaponImbueMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "PendingAddSilver": {
+    "FreezeDaytime": {
       "toggles": 2,
       "reacted": 2,
       "site_reacted": 2,
       "cave_reacted": 2,
-      "non_default_toggles": 2,
+      "non_default_toggles": 0,
       "world_attached_toggles": 2,
       "rate": 1.0
     },
-    "ThiefDetectionMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "PickpocketSuccessMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "BountyImmunityMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "ThiefGloveFenceMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "BagExpandSlots": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "SpecialConvenienceMode": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
-      "non_default_toggles": 2,
-      "world_attached_toggles": 4,
-      "rate": 1.0
-    },
-    "FreezeDaytime": {
-      "toggles": 4,
-      "reacted": 4,
-      "site_reacted": 4,
-      "cave_reacted": 4,
+    "ThiefStealthMode": {
+      "toggles": 18,
+      "reacted": 14,
+      "site_reacted": 14,
+      "cave_reacted": 14,
       "non_default_toggles": 0,
-      "world_attached_toggles": 4,
-      "rate": 1.0
+      "world_attached_toggles": 12,
+      "rate": 0.78
     }
   },
   "verified_keys": [
@@ -338,6 +353,7 @@
     "TamingMultiplier",
     "ThiefDetectionMode",
     "ThiefGloveFenceMode",
+    "ThiefStealthMode",
     "UnderwaterOxygenMultiplier",
     "UnderwaterSpeed",
     "WeaponImbueMode"

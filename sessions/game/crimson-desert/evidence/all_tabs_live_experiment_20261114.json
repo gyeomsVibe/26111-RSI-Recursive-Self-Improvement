@@ -1,0 +1,1337 @@
+{
+  "session_id": "20261114_191152_u08_alltabs",
+  "tag": "u08_alltabs",
+  "mode": "hud-all-tabs-experiment",
+  "trigger_verified": true,
+  "aborted": false,
+  "abort_reason": "",
+  "aborted_by_human_input": false,
+  "completed_at": "2026-11-14T19:14:38",
+  "entered_world": true,
+  "world_loaded": true,
+  "player_ptr_valid": true,
+  "top_bar_buttons_tested": 7,
+  "top_bar_buttons_passed": 7,
+  "tab_headers_tested": 4,
+  "tab_headers_passed": 4,
+  "total_row_buttons_tested": 129,
+  "total_row_buttons_passed": 129,
+  "failed_buttons": [],
+  "xml_preserved": true,
+  "save_guard_restored_ok": true,
+  "top_bar_results": [
+    {
+      "cat": "top_bar",
+      "row": "preset_balanced",
+      "label": "★ 1. 추천 세트",
+      "passed": true,
+      "observed": {
+        "active": 13,
+        "def": 2500
+      }
+    },
+    {
+      "cat": "top_bar",
+      "row": "preset_super",
+      "label": "◆ 2. 초월 풀셋",
+      "passed": true,
+      "observed": {
+        "god": 1,
+        "sta": 4,
+        "dmg": 1000
+      }
+    },
+    {
+      "cat": "top_bar",
+      "row": "reset_vanilla",
+      "label": "↺ 3. 초기화",
+      "passed": true,
+      "observed": 0
+    },
+    {
+      "cat": "top_bar",
+      "row": "helmet_toggle",
+      "label": "★ 헬멧:표시",
+      "passed": true,
+      "observed": 1
+    },
+    {
+      "cat": "top_bar",
+      "row": "thief_toggle",
+      "label": "◈ 도둑:정상",
+      "passed": true,
+      "observed": {
+        "thiefDet": 3,
+        "bounty": 3
+      }
+    },
+    {
+      "cat": "top_bar",
+      "row": "clarity_toggle",
+      "label": "▣ 화질:FSR67%",
+      "passed": true,
+      "observed": {
+        "xml_protected": true
+      }
+    },
+    {
+      "cat": "top_bar",
+      "row": "external_fling",
+      "label": "⚡ FLiNG 트레이너",
+      "passed": true,
+      "observed": {
+        "hooks_preserved": 2
+      }
+    }
+  ],
+  "tab_header_results": [
+    {
+      "tab": 0,
+      "passed": true,
+      "label": "⚔ 탭1: 전투 · 생존 (7종)"
+    },
+    {
+      "tab": 1,
+      "passed": true,
+      "label": "♥ 탭2: 연애 · 조련 (6종)"
+    },
+    {
+      "tab": 2,
+      "passed": true,
+      "label": "▲ 탭3: 제작 · 장비 (6종)"
+    },
+    {
+      "tab": 3,
+      "passed": true,
+      "label": "◈ 탭4: 도둑 · 특수 (6종)"
+    }
+  ],
+  "tabs": [
+    {
+      "tab": 0,
+      "tested": 42,
+      "passed": 42,
+      "rows": [
+        {
+          "row": "방어·무적",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "-30%",
+              "passed": true,
+              "got": 1428,
+              "expected": 1428
+            },
+            {
+              "idx": 2,
+              "label": "-50%추천",
+              "passed": true,
+              "got": 2500,
+              "expected": 2500
+            },
+            {
+              "idx": 3,
+              "label": "-75%",
+              "passed": true,
+              "got": 5000,
+              "expected": 5000
+            },
+            {
+              "idx": 4,
+              "label": "완전무적",
+              "passed": true,
+              "got": 999999,
+              "expected": 999999
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "공격력 배율",
+          "count": 8,
+          "passed_count": 8,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x1.2",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 2,
+              "label": "x1.5손맛",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 3,
+              "label": "x2.0추천",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 4,
+              "label": "x2.5",
+              "passed": true,
+              "got": 5,
+              "expected": 5
+            },
+            {
+              "idx": 5,
+              "label": "x3.0",
+              "passed": true,
+              "got": 6,
+              "expected": 6
+            },
+            {
+              "idx": 6,
+              "label": "x5.0",
+              "passed": true,
+              "got": 10,
+              "expected": 10
+            },
+            {
+              "idx": 7,
+              "label": "일격필살",
+              "passed": true,
+              "got": 1000,
+              "expected": 1000
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "기력(스태미나)",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "소모-30%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "소모-50%",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "회복2배추천",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "무한기력",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "스킬 쿨타임",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "-30%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "-50%추천",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "-75%",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "0초(노쿨)",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "경험치(EXP)",
+          "count": 7,
+          "passed_count": 7,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x2배추천",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 2,
+              "label": "x3배",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 3,
+              "label": "x4배",
+              "passed": true,
+              "got": 4.0,
+              "expected": 4.0
+            },
+            {
+              "idx": 4,
+              "label": "x5배",
+              "passed": true,
+              "got": 5.0,
+              "expected": 5.0
+            },
+            {
+              "idx": 5,
+              "label": "x7배",
+              "passed": true,
+              "got": 7.0,
+              "expected": 7.0
+            },
+            {
+              "idx": 6,
+              "label": "x10배",
+              "passed": true,
+              "got": 10.0,
+              "expected": 10.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            }
+          ]
+        },
+        {
+          "row": "이동/전투속도",
+          "count": 6,
+          "passed_count": 6,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x1.15",
+              "passed": true,
+              "got": 1.15,
+              "expected": 1.15
+            },
+            {
+              "idx": 2,
+              "label": "x1.3",
+              "passed": true,
+              "got": 1.3,
+              "expected": 1.3
+            },
+            {
+              "idx": 3,
+              "label": "x1.5추천",
+              "passed": true,
+              "got": 1.5,
+              "expected": 1.5
+            },
+            {
+              "idx": 4,
+              "label": "x2.0",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 5,
+              "label": "x3.0",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1.0)",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            }
+          ]
+        },
+        {
+          "row": "점프 도약력",
+          "count": 6,
+          "passed_count": 6,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x1.5배",
+              "passed": true,
+              "got": 0.5,
+              "expected": 0.5
+            },
+            {
+              "idx": 2,
+              "label": "x2배추천",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            },
+            {
+              "idx": 3,
+              "label": "x3배",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 4,
+              "label": "x4배",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 5,
+              "label": "x5배",
+              "passed": true,
+              "got": 4.0,
+              "expected": 4.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": 0.0,
+              "expected": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": 1,
+      "tested": 31,
+      "passed": 31,
+      "rows": [
+        {
+          "row": "연애 호감도",
+          "count": 6,
+          "passed_count": 6,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x2배추천",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 2,
+              "label": "x3배",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 3,
+              "label": "x5배",
+              "passed": true,
+              "got": 5.0,
+              "expected": 5.0
+            },
+            {
+              "idx": 4,
+              "label": "x10배",
+              "passed": true,
+              "got": 10.0,
+              "expected": 10.0
+            },
+            {
+              "idx": 5,
+              "label": "즉시MAX",
+              "passed": true,
+              "got": 100.0,
+              "expected": 100.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            }
+          ]
+        },
+        {
+          "row": "동물 조련",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "저항-50%추천",
+              "passed": true,
+              "got": [
+                1.5,
+                0
+              ],
+              "expected": [
+                1.5,
+                0
+              ]
+            },
+            {
+              "idx": 2,
+              "label": "숙련x3",
+              "passed": true,
+              "got": [
+                3.0,
+                0
+              ],
+              "expected": [
+                3.0,
+                0
+              ]
+            },
+            {
+              "idx": 3,
+              "label": "달인x5",
+              "passed": true,
+              "got": [
+                5.0,
+                0
+              ],
+              "expected": [
+                5.0,
+                0
+              ]
+            },
+            {
+              "idx": 4,
+              "label": "즉시성공",
+              "passed": true,
+              "got": [
+                1.0,
+                1
+              ],
+              "expected": [
+                1.0,
+                1
+              ]
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": [
+                1.0,
+                0
+              ],
+              "expected": [
+                1.0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "row": "탈것 질주속도",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x1.2",
+              "passed": true,
+              "got": 1.2,
+              "expected": 1.2
+            },
+            {
+              "idx": 2,
+              "label": "x1.5추천",
+              "passed": true,
+              "got": 1.5,
+              "expected": 1.5
+            },
+            {
+              "idx": 3,
+              "label": "x2.0질주",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 4,
+              "label": "x3.0초고속",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1.0)",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            }
+          ]
+        },
+        {
+          "row": "탈것 기력소모",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "소모-30%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "소모-50%",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "소모-75%",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "무한기력",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "수중 잠수호흡",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "호흡x2",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "호흡x3추천",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "호흡x5",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "무한잠수",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "수중 수영속도",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "x1.2",
+              "passed": true,
+              "got": 1.2,
+              "expected": 1.2
+            },
+            {
+              "idx": 2,
+              "label": "x1.5추천",
+              "passed": true,
+              "got": 1.5,
+              "expected": 1.5
+            },
+            {
+              "idx": 3,
+              "label": "x2.0빠름",
+              "passed": true,
+              "got": 2.0,
+              "expected": 2.0
+            },
+            {
+              "idx": 4,
+              "label": "x3.0초고속",
+              "passed": true,
+              "got": 3.0,
+              "expected": 3.0
+            },
+            {
+              "idx": 0,
+              "label": "OFF(x1.0)",
+              "passed": true,
+              "got": 1.0,
+              "expected": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": 2,
+      "tested": 31,
+      "passed": 31,
+      "rows": [
+        {
+          "row": "제작 재료할인",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "-25%할인",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "-50%반값추천",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "-75%할인",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "무재료(0개)",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "장비 대성공",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "성공2배추천",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "성공3배",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "성공5배",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "전설100%",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(1배)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "장비 내구도",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "소모-30%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "소모-50%",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "소모-75%",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "무한내구도",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "외형 숨김(HAWT)",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "헬멧숨김(투명ON)",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "헬멧+망토숨김",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "납도무기까지숨김",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "전체표시(OFF)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "무기 속성각인",
+          "count": 6,
+          "passed_count": 6,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "화염 폭발",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "빙결 제압",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "뇌전 연쇄",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 4,
+              "label": "흡혈+치명",
+              "passed": true,
+              "got": 4,
+              "expected": 4
+            },
+            {
+              "idx": 5,
+              "label": "전속성 마스터",
+              "passed": true,
+              "got": 5,
+              "expected": 5
+            },
+            {
+              "idx": 0,
+              "label": "각인해제",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "은화(골드) 주입",
+          "count": 6,
+          "passed_count": 6,
+          "buttons": [
+            {
+              "idx": 0,
+              "label": "+1,000 G",
+              "passed": true,
+              "got": {
+                "silver": 10000100000,
+                "pendGold": 10000100000
+              },
+              "expected": {
+                "delta": 100000
+              }
+            },
+            {
+              "idx": 1,
+              "label": "+5,000 G",
+              "passed": true,
+              "got": {
+                "silver": 10000600000,
+                "pendGold": 10000600000
+              },
+              "expected": {
+                "delta": 500000
+              }
+            },
+            {
+              "idx": 2,
+              "label": "+1만 G",
+              "passed": true,
+              "got": {
+                "silver": 10001600000,
+                "pendGold": 10001600000
+              },
+              "expected": {
+                "delta": 1000000
+              }
+            },
+            {
+              "idx": 3,
+              "label": "+5만 G",
+              "passed": true,
+              "got": {
+                "silver": 10006600000,
+                "pendGold": 10006600000
+              },
+              "expected": {
+                "delta": 5000000
+              }
+            },
+            {
+              "idx": 4,
+              "label": "+10만 G",
+              "passed": true,
+              "got": {
+                "silver": 10016600000,
+                "pendGold": 10016600000
+              },
+              "expected": {
+                "delta": 10000000
+              }
+            },
+            {
+              "idx": 5,
+              "label": "+50만 G",
+              "passed": true,
+              "got": {
+                "silver": 10066600000,
+                "pendGold": 10066600000
+              },
+              "expected": {
+                "delta": 50000000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tab": 3,
+      "tested": 25,
+      "passed": 25,
+      "rows": [
+        {
+          "row": "도둑질 발각확률",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "발각-50%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "발각-80%",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "발각0%(완전은신추천)",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "소매치기 성공률",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "성공률 x2",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "성공률 x3",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "100% 무조건성공(추천)",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "범죄 현상금/수배",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "현상금 -50%",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "현상금 0G",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "영구무죄(악명0추천)",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "대도의 장갑/장물",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "기본착용ON",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "모든세이브소유",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "장물 100% 정상매입",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "미착용",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "인벤토리 가방확장",
+          "count": 5,
+          "passed_count": 5,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "가방 +20칸",
+              "passed": true,
+              "got": 20,
+              "expected": 20
+            },
+            {
+              "idx": 2,
+              "label": "가방 +40칸",
+              "passed": true,
+              "got": 40,
+              "expected": 40
+            },
+            {
+              "idx": 3,
+              "label": "가방 +60칸 최대",
+              "passed": true,
+              "got": 60,
+              "expected": 60
+            },
+            {
+              "idx": 4,
+              "label": "창고 900칸",
+              "passed": true,
+              "got": 900,
+              "expected": 900
+            },
+            {
+              "idx": 0,
+              "label": "기본(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        },
+        {
+          "row": "수면/낙하/자유비행",
+          "count": 4,
+          "passed_count": 4,
+          "buttons": [
+            {
+              "idx": 1,
+              "label": "즉시수면(쿨0초)",
+              "passed": true,
+              "got": 1,
+              "expected": 1
+            },
+            {
+              "idx": 2,
+              "label": "낙하피해 0 면제",
+              "passed": true,
+              "got": 2,
+              "expected": 2
+            },
+            {
+              "idx": 3,
+              "label": "체공/자유비행ON",
+              "passed": true,
+              "got": 3,
+              "expected": 3
+            },
+            {
+              "idx": 0,
+              "label": "OFF(정상)",
+              "passed": true,
+              "got": 0,
+              "expected": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "action_probes": [
+    {
+      "tab_idx": 0,
+      "mean_frame_delta": 16.25,
+      "max_frame_delta": 18.66,
+      "stuck_recoveries": 0,
+      "start_luma": 34.64,
+      "start_std_luma": 26.06
+    },
+    {
+      "tab_idx": 1,
+      "mean_frame_delta": 35.86,
+      "max_frame_delta": 47.59,
+      "stuck_recoveries": 0,
+      "start_luma": 82.2,
+      "start_std_luma": 50.61
+    },
+    {
+      "tab_idx": 2,
+      "mean_frame_delta": 39.3,
+      "max_frame_delta": 50.56,
+      "stuck_recoveries": 0,
+      "start_luma": 77.1,
+      "start_std_luma": 52.76
+    },
+    {
+      "tab_idx": 3,
+      "mean_frame_delta": 26.28,
+      "max_frame_delta": 36.17,
+      "stuck_recoveries": 1,
+      "start_luma": 78.6,
+      "start_std_luma": 60.14
+    }
+  ],
+  "proof_screenshots": [
+    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab1_in_game.png",
+    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab2_in_game.png",
+    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab3_in_game.png",
+    "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab4_in_game.png"
+  ],
+  "presentmon_csv_path": "D:\\Games\\Crimson Desert\\tuning\\research\\sessions\\20261114-191152-u08_alltabs-frames.csv",
+  "presentmon_summary": {
+    "total_frames": 1921,
+    "mean_present_fps": 30.75,
+    "mean_present_ms": 32.52,
+    "p95_present_ms": 39.87,
+    "p99_present_ms": 46.38,
+    "slowest_1pct_fps": 13.15,
+    "stutter_33ms_pct": 43.103,
+    "mean_gpu_busy_ms": 32.41,
+    "mean_cpu_busy_ms": 10.04,
+    "mean_render_present_lat_ms": 36.78,
+    "present_modes": {
+      "Composed: Flip": 1923
+    },
+    "csv_file": "20261114-191152-u08_alltabs-frames.csv"
+  },
+  "peak_ram_mb": 5276.3,
+  "peak_vram_mb": 4344,
+  "peak_gpu_temp_c": 54
+}

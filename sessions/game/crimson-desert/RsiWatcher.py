@@ -38,6 +38,7 @@ LIVE_TOGGLE_AUDIT_JSON = os.path.join(RSI_DIR, "live_toggle_audit.json")
 CHEAT_INI_PATH = os.path.join(TUNING_DIR, "CrimsonDesert_CheatConfig.ini")
 CRASH_EVENTS_JSONL = os.path.join(RSI_DIR, "crash_events.jsonl")
 RSI_STATE_JSON = os.path.join(RSI_DIR, "rsi_state.json")
+AUTO_PLAY_STATUS_JSON = os.path.join(RSI_DIR, "auto_play_status.json")
 WATCHER_LOG = os.path.join(RSI_DIR, "rsi_watcher.log")
 RSI_ENGINE_PY = os.path.join(TUNING_DIR, "RsiEngine.py")
 PRESENTMON_EXE = os.path.join(TUNING_DIR, "tools", "PresentMon-2.6.0-x64.exe")
@@ -52,7 +53,7 @@ NORMAL_PRIORITY_CLASS = 0x00000020
 ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
 PROCESS_SET_INFORMATION = 0x0200
 TARGET_SESSION_SEC = 1800
-PRESENTMON_INTERVAL_SEC = 120.0
+PRESENTMON_INTERVAL_SEC = 600.0
 PRESENTMON_WARMUP_SEC = 25.0
 PRESENTMON_DURATION_SEC = 20
 
@@ -669,9 +670,22 @@ def trigger_rsi_engine(reason: str = "manual", timeout_sec: float = 30.0) -> int
     """Invoke RsiEngine.py --evolve synchronously (zero paid tokens)."""
     if not os.path.exists(RSI_ENGINE_PY):
         return -1
+    cmd = [sys.executable, RSI_ENGINE_PY, "--evolve", "--reason", reason]
+    try:
+        if os.path.exists(AUTO_PLAY_STATUS_JSON) and (time.time() - os.path.getmtime(AUTO_PLAY_STATUS_JSON)) <= 90.0:
+            with open(AUTO_PLAY_STATUS_JSON, "r", encoding="utf-8") as sf:
+                sdata = json.load(sf)
+            if isinstance(sdata, dict) and sdata.get("trigger_verified") is True and (
+                sdata.get("running") is True
+                or sdata.get("preserve_live_xml") is True
+                or "HUD_" in str(sdata.get("event", ""))
+            ):
+                cmd.append("--preserve-live-xml")
+    except Exception:
+        pass
     try:
         res = subprocess.run(
-            [sys.executable, RSI_ENGINE_PY, "--evolve", "--reason", reason],
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout_sec,
@@ -805,6 +819,23 @@ def run_self_test() -> int:
     assert unload_ollama_vram_for_game(host="http://127.0.0.1:11434", opener=_mock_opener) == 1
     assert len(seen_calls) == 2 and '"keep_alive": 0' in seen_calls[1][1]
     assert unload_ollama_vram_for_game(host="http://127.0.0.1:59999", timeout_sec=0.2) == 0
+
+    if PRESENTMON_INTERVAL_SEC < 600.0:
+        print(f"[RSI-WATCHER-SELF-TEST FAIL] PRESENTMON_INTERVAL_SEC={PRESENTMON_INTERVAL_SEC} < 600.0")
+        return 5
+    with open(__file__, "r", encoding="utf-8") as sf:
+        src_lines = [
+            ln for ln in sf.read().splitlines()
+            if not ln.lstrip().startswith("#")
+            and not ln.lstrip().startswith('"""')
+            and "CONTROL_GUARD_" not in ln
+            and "forbidden_api" not in ln
+        ]
+    logic_blob = "\n".join(src_lines)
+    for forbidden_api in ("SendInput", "SetForegroundWindow", "keybd_event", "mouse_event", "CrimsonAutoPlayEngine"):
+        if forbidden_api in logic_blob:
+            print(f"[RSI-WATCHER-SELF-TEST FAIL] CONTROL_GUARD_HIT: {forbidden_api}")
+            return 6
 
     print("[RSI-WATCHER-SELF-TEST PASS]")
     return 0
@@ -954,7 +985,8 @@ def run_loop(once: bool = False) -> None:
                 )
 
             ram_mb = get_process_ws_mb(pid)
-            if (now - last_gpu_ts) >= 4.0 or last_gpu_ts == 0.0:
+            gpu_poll_interval = 30.0 if running else 8.0
+            if (now - last_gpu_ts) >= gpu_poll_interval or last_gpu_ts == 0.0:
                 last_gpu_stats = query_gpu_stats()
                 last_gpu_ts = now
             gpu = last_gpu_stats
