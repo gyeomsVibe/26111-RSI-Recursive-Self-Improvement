@@ -1128,8 +1128,9 @@ def export_unified_game_rsi_snapshot(state, latest_eval=None):
 
 def _apply_pending_if_idle_unlocked(state):
     if state.get("pending_apply_on_exit") and not is_game_running():
-        params = state.get("active_parameters", build_arm_params(state.get("active_arm", DEFAULT_ARM_ID)))
-        update_xml_preset(MASTER_PROFILE, params)
+        params = dict(state.get("active_parameters", build_arm_params(state.get("active_arm", "FSR67_CombatLock"))))
+        params["texture"] = "High"
+        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
         if os.path.exists(LIVE_CONFIG):
             update_xml_preset(LIVE_CONFIG, params)
         state["pending_apply_on_exit"] = False
@@ -1195,10 +1196,12 @@ def _run_rsi_cycle_unlocked(preserve_live_xml=False):
         shutil.copyfile(MASTER_PROFILE, snapshot_path)
 
     game_running = is_game_running()
+    new_params = dict(new_params)
+    new_params["texture"] = "High"
     if preserve_live_xml:
         state["pending_apply_on_exit"] = False
     else:
-        update_xml_preset(MASTER_PROFILE, new_params)
+        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
         if game_running:
             state["pending_apply_on_exit"] = decision["switched"] or state.get("pending_apply_on_exit", False)
         elif os.path.exists(LIVE_CONFIG):
@@ -1364,14 +1367,16 @@ def rollback_generation():
             prev_path = os.path.join(HISTORY_DIR, prev_snapshot)
             if os.path.exists(prev_path):
                 validate_xml_strict(prev_path)
-                shutil.copyfile(prev_path, MASTER_PROFILE)
                 if os.path.exists(LIVE_CONFIG) and not is_game_running():
                     shutil.copyfile(prev_path, LIVE_CONFIG)
                 print(f"[RSI v4] Gen-{last_gen['generation']} -> Gen-{last_gen['generation'] - 1} XML 롤백 완료 ({prev_snapshot})")
+        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
 
         state["current_generation"] = max(1, int(state.get("current_generation", 1)) - 1)
         if history:
-            state["active_parameters"] = history[-1].get("parameters", build_arm_params(DEFAULT_ARM_ID))
+            restored_params = dict(history[-1].get("parameters", build_arm_params("FSR67_CombatLock")))
+            restored_params["texture"] = "High"
+            state["active_parameters"] = restored_params
             state["active_arm"] = detect_arm_from_params(state["active_parameters"])
 
         popped_files = last_gen.get("processed_files") or []

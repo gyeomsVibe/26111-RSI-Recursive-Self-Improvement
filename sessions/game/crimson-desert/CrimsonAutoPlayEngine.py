@@ -739,6 +739,45 @@ def write_ini_config(overrides=None):
     os.replace(tmp_path, INI_PATH)
 
 
+def snapshot_ini_config(ini_path=INI_PATH):
+    snap = {}
+    if os.path.exists(ini_path):
+        try:
+            with open(ini_path, "r", encoding="utf-8", errors="replace") as f:
+                for raw in f:
+                    s = raw.strip()
+                    if not s or s.startswith(("[", ";", "#")) or "=" not in s:
+                        continue
+                    k, v = [x.strip() for x in s.split("=", 1)]
+                    if k != "UpdatedAt":
+                        snap[k] = v
+        except Exception:
+            pass
+    return snap
+
+
+def restore_ini_config_safe_speeds(snap, ini_path=INI_PATH):
+    merged = dict(snap or {})
+    merged["SpeedMultiplier"] = "1"
+    merged["JumpMultiplier"] = "1"
+    merged["MountSpeedMultiplier"] = "1"
+    merged["UnderwaterSpeed"] = "1"
+    if str(merged.get("SpecialConvenienceMode", "0")) in ("2", "3"):
+        merged["SpecialConvenienceMode"] = "0"
+    if ini_path == INI_PATH:
+        write_ini_config(merged)
+    else:
+        lines = ["[CheatConfig]"]
+        for k, v in merged.items():
+            lines.append(f"{k}={v}")
+        lines.append(f"UpdatedAt={datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        tmp_p = ini_path + ".tmp"
+        with open(tmp_p, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp_p, ini_path)
+
+
+
 def get_gpu_and_proc_stats(game_pid):
     alive, ram_mb = check_process_fast(game_pid)
     stats = {
@@ -1736,6 +1775,7 @@ def run_hud_all_tabs_experiment(args):
     os.makedirs(LIVE_HUD_PROOF_DIR, exist_ok=True)
     guard_dir = os.path.join(WORK_DIR, f"autoplay_save_guard_{session_id}")
     pre_save_hashes = snapshot_user_saves(guard_dir)
+    pre_ini_snap = snapshot_ini_config(INI_PATH)
     log_event("SAVE_GUARD_SNAPSHOT", f"Protected {len(pre_save_hashes)} save files in {guard_dir}")
 
     pm_csv_path = os.path.join(SESSIONS_DIR, f"{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}-{args.tag}-frames.csv")
@@ -2044,7 +2084,7 @@ def run_hud_all_tabs_experiment(args):
     finally:
         release_all_keys()
         hw_guard.stop()
-        write_ini_config({})
+        restore_ini_config_safe_speeds(pre_ini_snap, INI_PATH)
         time_real_sleep(0.5)
         if pm_proc is not None and pm_proc.poll() is None:
             try:
@@ -2060,6 +2100,8 @@ def run_hud_all_tabs_experiment(args):
                 timeout=6, creationflags=0x08000000,
             )
             time_real_sleep(0.5)
+        # Re-apply after launcher stop so debounced OnFormClosing never overwrites safe 1.0x speeds
+        restore_ini_config_safe_speeds(pre_ini_snap, INI_PATH)
         if not getattr(args, "keep_game_alive", False):
             subprocess.run(
                 ["powershell", "-NoProfile", "-Command", "Stop-Process -Name CrimsonDesert -Force -ErrorAction SilentlyContinue"],
@@ -2228,6 +2270,15 @@ def run_self_test():
             f.write(REQUIRED_TRIGGER_PHRASE)
         ok_tok, mode_tok = verify_self_test_trigger("", tf)
         assert ok_tok and mode_tok == "token_file" and not os.path.exists(tf), "Token file one-shot validation failed"
+
+        test_ini = os.path.join(td, "test_cheat.ini")
+        with open(test_ini, "w", encoding="utf-8") as f:
+            f.write("[CheatConfig]\nDamageTakenMode=2\nSpeedMultiplier=2.0\nMountSpeedMultiplier=1.2\nUnderwaterSpeed=1.5\nSpecialConvenienceMode=2\n")
+        snap_ini = snapshot_ini_config(test_ini)
+        restore_ini_config_safe_speeds(snap_ini, test_ini)
+        restored_snap = snapshot_ini_config(test_ini)
+        assert restored_snap.get("DamageTakenMode") == "2", "User combat preference not preserved"
+        assert restored_snap.get("SpeedMultiplier") == "1" and restored_snap.get("MountSpeedMultiplier") == "1" and restored_snap.get("UnderwaterSpeed") == "1" and restored_snap.get("SpecialConvenienceMode") == "0", f"Safe speed reset failed: {restored_snap}"
 
     assert _is_physical_key_override(0x0100, 0x10) is False, "Injected SendInput must be ignored"
     assert _is_physical_key_override(0x0100, 0x00) is True, "Physical keydown must trigger override"

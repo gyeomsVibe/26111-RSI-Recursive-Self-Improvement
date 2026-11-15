@@ -2911,11 +2911,11 @@ class Launcher : Form {
             SetPlayerStaminaMode(4); // 무한 기력(스태미나)
             SetCooldownMode(2); // 쿨타임 50% 단축
             SetExpMultiplier(2);
-            SetSpeedMultiplier(1.5f); // 이동속도 1.5배 추천
-            SetJumpMultiplier(2.0f); // 점프 도약 2배 추천
+            SetSpeedMultiplier(1.0f); // 기본 정상 이동속도 1.0배 고정 (사용자 요청 반영)
+            SetJumpMultiplier(1.0f); // 기본 정상 점프 1.0배 고정
             SetRomanceMultiplier(2); // 호감도 2배
             SetTamingEase(2); // 조련 저항 반감
-            SetMountSpeed(1.5f); // 탈것 속도 1.5배 추천
+            SetMountSpeed(1.0f); // 탈것 기본 정상 속도 1.0배 고정
             SetMountStaminaMode(4); // 탈것 무한기력
             SetUnderwaterOxygen(3); // 수중호흡 3배
             SetUnderwaterSpeed(1.0f); // 수영 속도 1.0배 (순정 물리 보존)
@@ -2926,7 +2926,7 @@ class Launcher : Form {
             SetWeaponImbueMode(4); // 흡혈+치명 각인
             SetThiefStealthMode(1);
             SetBagExpandSlots(60);
-            SetSpecialConvenienceMode(2); // 낙하 피해 면제
+            SetSpecialConvenienceMode(0); // 물리 훅 미개입(순정 물리 보존)
         } finally {
             suppressSaveSync = prev;
             _suppressConfigSave = prevCfg;
