@@ -757,13 +757,17 @@ def snapshot_ini_config(ini_path=INI_PATH):
 
 
 def restore_ini_config_safe_speeds(snap, ini_path=INI_PATH):
-    merged = dict(snap or {})
-    merged["SpeedMultiplier"] = "1"
-    merged["JumpMultiplier"] = "1"
-    merged["MountSpeedMultiplier"] = "1"
-    merged["UnderwaterSpeed"] = "1"
-    if str(merged.get("SpecialConvenienceMode", "0")) in ("2", "3"):
-        merged["SpecialConvenienceMode"] = "0"
+    """Restores the pre-test INI snapshot (preserving pre-existing user speed/jump preferences while discarding mid-test toggle mutations); defaults missing keys to safe 1.0x/0."""
+    snap_dict = dict(snap or {})
+    merged = {
+        "SpeedMultiplier": "1",
+        "JumpMultiplier": "1",
+        "MountSpeedMultiplier": "1",
+        "UnderwaterSpeed": "1",
+        "SpecialConvenienceMode": "0",
+    }
+    for k, v in snap_dict.items():
+        merged[k] = str(v)
     if ini_path == INI_PATH:
         write_ini_config(merged)
     else:
@@ -2273,12 +2277,15 @@ def run_self_test():
 
         test_ini = os.path.join(td, "test_cheat.ini")
         with open(test_ini, "w", encoding="utf-8") as f:
-            f.write("[CheatConfig]\nDamageTakenMode=2\nSpeedMultiplier=2.0\nMountSpeedMultiplier=1.2\nUnderwaterSpeed=1.5\nSpecialConvenienceMode=2\n")
+            f.write("[CheatConfig]\nDamageTakenMode=2\nSpeedMultiplier=1.3\n")
         snap_ini = snapshot_ini_config(test_ini)
+        # Simulate mid-test toggle mutations leaving 3.0x/1.5x speeds in the INI file
+        with open(test_ini, "w", encoding="utf-8") as f:
+            f.write("[CheatConfig]\nDamageTakenMode=0\nSpeedMultiplier=3.0\nMountSpeedMultiplier=1.2\nUnderwaterSpeed=1.5\nSpecialConvenienceMode=2\n")
         restore_ini_config_safe_speeds(snap_ini, test_ini)
         restored_snap = snapshot_ini_config(test_ini)
-        assert restored_snap.get("DamageTakenMode") == "2", "User combat preference not preserved"
-        assert restored_snap.get("SpeedMultiplier") == "1" and restored_snap.get("MountSpeedMultiplier") == "1" and restored_snap.get("UnderwaterSpeed") == "1" and restored_snap.get("SpecialConvenienceMode") == "0", f"Safe speed reset failed: {restored_snap}"
+        assert restored_snap.get("DamageTakenMode") == "2" and restored_snap.get("SpeedMultiplier") == "1.3", f"Pre-existing user preferences not restored: {restored_snap}"
+        assert restored_snap.get("MountSpeedMultiplier") == "1" and restored_snap.get("UnderwaterSpeed") == "1" and restored_snap.get("SpecialConvenienceMode") == "0", f"Mid-test speed mutations not reverted to safe defaults: {restored_snap}"
 
     assert _is_physical_key_override(0x0100, 0x10) is False, "Injected SendInput must be ignored"
     assert _is_physical_key_override(0x0100, 0x00) is True, "Physical keydown must trigger override"

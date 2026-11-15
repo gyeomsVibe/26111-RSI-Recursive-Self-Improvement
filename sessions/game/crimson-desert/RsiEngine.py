@@ -1126,15 +1126,34 @@ def export_unified_game_rsi_snapshot(state, latest_eval=None):
     return UNIFIED_SUMMARY_JSON
 
 
-def _apply_pending_if_idle_unlocked(state):
-    if state.get("pending_apply_on_exit") and not is_game_running():
-        params = dict(state.get("active_parameters", build_arm_params(state.get("active_arm", "FSR67_CombatLock"))))
-        params["texture"] = "High"
-        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
-        if os.path.exists(LIVE_CONFIG):
-            update_xml_preset(LIVE_CONFIG, params)
+def enforce_master_combat_lock_params(params=None):
+    """Enforces the locked GTX 1070 anti-TDR preset (FSR 67% + High Tex + Med Model/Water) across all live/master XML writes."""
+    locked = build_arm_params("FSR67_CombatLock", params)
+    locked["arm_id"] = "FSR67_CombatLock"
+    locked["scale_display"] = "67%"
+    locked["texture"] = "High"
+    locked["model"] = "Medium"
+    locked["water"] = "Medium"
+    return locked
+
+
+def _apply_pending_if_idle_unlocked(
+    state,
+    live_config=LIVE_CONFIG,
+    master_profile=MASTER_PROFILE,
+    game_running_fn=is_game_running,
+    save_state_fn=save_state,
+):
+    if state.get("pending_apply_on_exit") and not game_running_fn():
+        params = enforce_master_combat_lock_params(state.get("active_parameters"))
+        state["active_arm"] = "FSR67_CombatLock"
+        state["active_parameters"] = params
+        if os.path.exists(master_profile):
+            update_xml_preset(master_profile, params)
+        if os.path.exists(live_config):
+            update_xml_preset(live_config, params)
         state["pending_apply_on_exit"] = False
-        save_state(state)
+        save_state_fn(state)
         print(f"[RSI] 게임 종료 후 대기 중이던 XML 최적화 설정을 실게임 설정에 안전 적용했습니다 ({params.get('arm_id')}).")
         return True
     return False
@@ -1196,16 +1215,17 @@ def _run_rsi_cycle_unlocked(preserve_live_xml=False):
         shutil.copyfile(MASTER_PROFILE, snapshot_path)
 
     game_running = is_game_running()
+    locked_params = enforce_master_combat_lock_params(new_params)
     new_params = dict(new_params)
     new_params["texture"] = "High"
     if preserve_live_xml:
         state["pending_apply_on_exit"] = False
     else:
-        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
+        update_xml_preset(MASTER_PROFILE, locked_params)
         if game_running:
             state["pending_apply_on_exit"] = decision["switched"] or state.get("pending_apply_on_exit", False)
         elif os.path.exists(LIVE_CONFIG):
-            update_xml_preset(LIVE_CONFIG, new_params)
+            update_xml_preset(LIVE_CONFIG, locked_params)
             state["pending_apply_on_exit"] = False
 
     gen_record = {
@@ -1291,9 +1311,9 @@ def _run_rsi_cycle_unlocked(preserve_live_xml=False):
     return {"status": "SUCCESS", "generation": gen, "decision": decision}
 
 
-def reset_to_high_quality():
+def reset_to_high_quality(live_config=LIVE_CONFIG, master_profile=MASTER_PROFILE, state_file=STATE_FILE, archive_file=ARCHIVE_FILE, game_running_fn=is_game_running):
     all_csvs = [os.path.basename(f) for f in sorted(glob.glob(os.path.join(SESSIONS_DIR, "*-frames.csv")))]
-    params = build_arm_params(DEFAULT_ARM_ID)
+    params = enforce_master_combat_lock_params()
     state = {
         "engine_version": 4,
         "current_generation": 1,
@@ -1303,19 +1323,19 @@ def reset_to_high_quality():
             "generation": 1,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "processed_files": [],
-            "arm_before": DEFAULT_ARM_ID,
-            "arm_after": DEFAULT_ARM_ID,
+            "arm_before": "FSR67_CombatLock",
+            "arm_after": "FSR67_CombatLock",
             "decision_mode": "RESET_BASELINE",
             "reward_score": 0.0,
             "bottleneck": "UNMEASURED",
             "parameters": params,
-            "actions": ["기본 베이스라인 복원 완료"],
-            "summary": "AA_UltraSharp 베이스라인 재설정",
+            "actions": ["마스터 잠금 프리셋(FSR67_CombatLock) 복원 완료"],
+            "summary": "FSR67_CombatLock 마스터 잠금 재설정",
             "snapshot": "Baseline_HighQuality.xml",
         }],
         "convergence_score": 0.0,
         "total_analyzed_sessions": 0,
-        "active_arm": DEFAULT_ARM_ID,
+        "active_arm": "FSR67_CombatLock",
         "active_parameters": params,
         "arm_stats": init_arm_stats(),
         "pending_apply_on_exit": False,
@@ -1323,11 +1343,12 @@ def reset_to_high_quality():
         "last_reward_score": 0.0,
         "last_measured_fps": 0.0,
     }
-    save_state(state)
-    update_xml_preset(MASTER_PROFILE, params)
-    if os.path.exists(LIVE_CONFIG) and not is_game_running():
-        update_xml_preset(LIVE_CONFIG, params)
-    print("[RSI v4] 베이스라인 파라미터(AA_UltraSharp) 복원 완료.")
+    save_state(state, state_file=state_file, archive_file=archive_file)
+    if os.path.exists(master_profile):
+        update_xml_preset(master_profile, params)
+    if os.path.exists(live_config) and not game_running_fn():
+        update_xml_preset(live_config, params)
+    print("[RSI v4] 마스터 잠금 파라미터(FSR67_CombatLock: 67%/High/Medium/Medium) 복원 완료.")
     return True
 
 
@@ -1335,11 +1356,7 @@ def lock_master_preset():
     """Locks 00-장시간무병목-고화질마스터-GTX1070최적.xml (FSR 67% Quality + High Tex + Med Model/Water) into MASTER_PROFILE, LIVE_CONFIG, and rsi_state.json."""
     with _RsiMutex():
         state = load_state()
-        params = build_arm_params("FSR67_CombatLock", state.get("active_parameters"))
-        params["scale_display"] = "67%"
-        params["texture"] = "High"
-        params["model"] = "Medium"
-        params["water"] = "Medium"
+        params = enforce_master_combat_lock_params(state.get("active_parameters"))
         params["fov"] = "1.250000"
         params["zoom"] = "1.180000"
         update_xml_preset(MASTER_PROFILE, params)
@@ -1354,30 +1371,47 @@ def lock_master_preset():
         return True
 
 
-def rollback_generation():
+def rollback_generation(
+    live_config=LIVE_CONFIG,
+    master_profile=MASTER_PROFILE,
+    history_dir=HISTORY_DIR,
+    state_file=STATE_FILE,
+    archive_file=ARCHIVE_FILE,
+    game_running_fn=is_game_running,
+):
     with _RsiMutex():
-        state = load_state()
+        state = load_state(state_file=state_file, archive_file=archive_file)
         history = state.get("history", [])
         if len(history) <= 1:
-            return reset_to_high_quality()
+            return reset_to_high_quality(
+                live_config=live_config,
+                master_profile=master_profile,
+                state_file=state_file,
+                archive_file=archive_file,
+                game_running_fn=game_running_fn,
+            )
 
         last_gen = history.pop()
         prev_snapshot = last_gen.get("snapshot")
+        locked_params = enforce_master_combat_lock_params(
+            history[-1].get("parameters") if history else None
+        )
         if prev_snapshot:
-            prev_path = os.path.join(HISTORY_DIR, prev_snapshot)
+            prev_path = os.path.join(history_dir, prev_snapshot)
             if os.path.exists(prev_path):
                 validate_xml_strict(prev_path)
-                if os.path.exists(LIVE_CONFIG) and not is_game_running():
-                    shutil.copyfile(prev_path, LIVE_CONFIG)
-                print(f"[RSI v4] Gen-{last_gen['generation']} -> Gen-{last_gen['generation'] - 1} XML 롤백 완료 ({prev_snapshot})")
-        update_xml_preset(MASTER_PROFILE, build_arm_params("FSR67_CombatLock"))
+                if os.path.exists(live_config) and not game_running_fn():
+                    shutil.copyfile(prev_path, live_config)
+                    update_xml_preset(live_config, locked_params)
+                print(f"[RSI v4] Gen-{last_gen['generation']} -> Gen-{last_gen['generation'] - 1} XML 롤백 및 마스터 잠금 완료 ({prev_snapshot})")
+        if os.path.exists(live_config) and not game_running_fn():
+            update_xml_preset(live_config, locked_params)
+        if os.path.exists(master_profile):
+            update_xml_preset(master_profile, locked_params)
 
         state["current_generation"] = max(1, int(state.get("current_generation", 1)) - 1)
-        if history:
-            restored_params = dict(history[-1].get("parameters", build_arm_params("FSR67_CombatLock")))
-            restored_params["texture"] = "High"
-            state["active_parameters"] = restored_params
-            state["active_arm"] = detect_arm_from_params(state["active_parameters"])
+        state["active_parameters"] = locked_params
+        state["active_arm"] = "FSR67_CombatLock"
 
         popped_files = last_gen.get("processed_files") or []
         still_used = {f for h in history for f in (h.get("processed_files") or [])}
@@ -1409,7 +1443,7 @@ def rollback_generation():
         if arm_before and isinstance(arm_stats, dict) and isinstance(arm_stats.get(arm_before), dict):
             arm_stats[arm_before]["pulls"] = max(0, int(arm_stats[arm_before].get("pulls", 0)) - 1)
 
-        save_state(state)
+        save_state(state, state_file=state_file, archive_file=archive_file)
         return True
 
 
@@ -1636,6 +1670,90 @@ def run_self_test_tail_and_parallel():
         m8, marked8 = analyze_unprocessed_sessions(st8, sessions_dir=tmp_sess8, rsi_dir=tmp_rsi8, limit_frames=1)
         assert m8 is None, f"Expected None when only historical CSVs exist, got {m8}"
         assert "20261107-120000-old-frames.csv" in marked8, f"Expected old CSV marked skipped, got {marked8}"
+
+    # Test 9: Regression test for rollback_generation and _apply_pending_if_idle_unlocked with old AA/High snapshot
+    def _assert_locked_xml(xml_path):
+        assert validate_xml_strict(xml_path) is True
+        root = ET.parse(xml_path).getroot()
+        scale_el = root.find(".//EnumSelectResolutionScale[@Name='_upscaleResolution']")
+        gfx_el = root.find(".//EngineOptionGraphics")
+        assert scale_el is not None and gfx_el is not None
+        gmap = {c.attrib.get("Name", ""): c.attrib.get("_select", "") for c in list(gfx_el)}
+        got = (
+            scale_el.attrib.get("_select", ""),
+            gmap.get("_textureQualityLevelSelect", ""),
+            gmap.get("_modelQualityLevelSelect", ""),
+            gmap.get("_waterQualityLevelSelect", ""),
+        )
+        assert got == ("67%", "High", "Medium", "Medium"), f"Expected locked ('67%', 'High', 'Medium', 'Medium'), got {got} in {xml_path}"
+
+    with tempfile.TemporaryDirectory() as tmpd9:
+        t_live = os.path.join(tmpd9, "live.xml")
+        t_master = os.path.join(tmpd9, "master.xml")
+        t_hist = os.path.join(tmpd9, "history")
+        t_state = os.path.join(tmpd9, "state.json")
+        t_arch = os.path.join(tmpd9, "arch.jsonl")
+        os.makedirs(t_hist, exist_ok=True)
+        shutil.copyfile(MASTER_PROFILE, t_live)
+        shutil.copyfile(MASTER_PROFILE, t_master)
+
+        old_snap_name = "Gen_0147_old_aa_high.xml"
+        old_snap_path = os.path.join(t_hist, old_snap_name)
+        shutil.copyfile(MASTER_PROFILE, old_snap_path)
+        update_xml_preset(old_snap_path, {"scale_display": "AA", "texture": "Medium", "model": "High", "water": "High"})
+        update_xml_preset(t_live, {"scale_display": "AA", "texture": "Medium", "model": "High", "water": "High"})
+
+        st9 = {
+            "engine_version": 4,
+            "current_generation": 148,
+            "active_arm": "AA_UltraSharp",
+            "active_parameters": build_arm_params("AA_UltraSharp"),
+            "arm_stats": init_arm_stats(),
+            "pending_apply_on_exit": False,
+            "history": [
+                {"generation": 147, "parameters": build_arm_params("AA_UltraSharp"), "snapshot": "Gen_0146.xml"},
+                {"generation": 148, "parameters": build_arm_params("AA_UltraSharp"), "snapshot": old_snap_name},
+            ],
+        }
+        save_state(st9, state_file=t_state, archive_file=t_arch)
+
+        rollback_generation(
+            live_config=t_live,
+            master_profile=t_master,
+            history_dir=t_hist,
+            state_file=t_state,
+            archive_file=t_arch,
+            game_running_fn=lambda: False,
+        )
+        _assert_locked_xml(t_live)
+        _assert_locked_xml(t_master)
+        st9_after = load_state(state_file=t_state, archive_file=t_arch)
+        assert st9_after["active_parameters"]["scale_display"] == "67%" and st9_after["active_parameters"]["model"] == "Medium"
+
+        # Now test _apply_pending_if_idle_unlocked when state had stale AA/High active_parameters
+        update_xml_preset(t_live, {"scale_display": "AA", "texture": "Medium", "model": "High", "water": "High"})
+        st9_pending = {
+            "engine_version": 4,
+            "current_generation": 148,
+            "active_arm": "AA_UltraSharp",
+            "active_parameters": {"scale_display": "AA", "texture": "Medium", "model": "High", "water": "High"},
+            "pending_apply_on_exit": True,
+            "history": [],
+        }
+        applied = _apply_pending_if_idle_unlocked(
+            st9_pending,
+            live_config=t_live,
+            master_profile=t_master,
+            game_running_fn=lambda: False,
+            save_state_fn=lambda s: save_state(s, state_file=t_state, archive_file=t_arch),
+        )
+        assert applied is True and st9_pending["pending_apply_on_exit"] is False
+        _assert_locked_xml(t_live)
+        _assert_locked_xml(t_master)
+
+    _assert_locked_xml(MASTER_PROFILE)
+    if os.path.exists(LIVE_CONFIG):
+        _assert_locked_xml(LIVE_CONFIG)
 
 
 if __name__ == "__main__":
