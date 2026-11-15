@@ -466,6 +466,20 @@ internal static class LiveMemoryCheatEngine {
     const long OFF_DATA_MOUNT_DECAY   = 0x3178; // i32
     const long OFF_DATA_PREV_MOUNT_S  = 0x317C; // i32
     const long OFF_DATA_CONST_NEG100  = 0x3180; // f32 (-100.0f)
+    const long OFF_DATA_PREV_STA      = 0x3188; // i64
+    const long OFF_DATA_PREV_SPI      = 0x3190; // i64
+    const long OFF_DATA_PREV_MSTA     = 0x3198; // i64
+    const long OFF_DATA_PREV_HP       = 0x31A0; // i64
+    const long OFF_DATA_BAG_CONT_PTR  = 0x31A8; // i64
+    const long OFF_DATA_DMG_TAKEN_MODE = 0x31B0; // i32 (0..4)
+
+    static long _lastValidPlayerPtr = 0;
+    static long _lastValidStaPtr = 0;
+    static long _lastValidSpiPtr = 0;
+    static long _lastValidInvMgrPtr = 0;
+    static long _lastValidBagContPtr = 0;
+    static long _lastValidSilverPtr = 0;
+    static System.Threading.Timer _fastJumpPollTimer = null;
 
     // External FLiNG Memory Control Addresses (0x211D0000 range)
     public const long FLING_ADDR_GODMODE   = 0x211D0200L;
@@ -540,8 +554,7 @@ internal static class LiveMemoryCheatEngine {
         _lastFlingCheckUtc = DateTime.MinValue;
         _extFlingAt = DateTime.MinValue;
         _cachedFlingRunning = true;
-        RevertAllHooks();
-        EngLog("Yielded internal hooks for external FLiNG trainer (12s grace window).");
+        EngLog("External FLiNG trainer detected: per-site coexistence mode active (internal hooks preserved).");
     }
 
     public static bool EnsureProcessAttached() {
@@ -747,16 +760,43 @@ internal static class LiveMemoryCheatEngine {
         if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero || baseAddr == 0) return false;
         long cf = caveFling.ToInt64();
         long invMgr = ReadI64(cf + OFF_DATA_INV_MGR_PTR);
-        if (!IsValidGameHeapPtr(invMgr)) return false;
-        long contArr = ReadI64(invMgr + 0x18);
-        if (!IsValidGameHeapPtr(contArr)) return false;
-        int contCnt = ReadI32(invMgr + 0x20);
-        if (contCnt < 1 || contCnt > 32) return false;
-        byte[] ptrBuf = ReadBytes(contArr, contCnt * 8);
-        if (ptrBuf == null || ptrBuf.Length < contCnt * 8) return false;
+        if (IsValidGameHeapPtr(invMgr)) {
+            _lastValidInvMgrPtr = invMgr;
+        } else if (IsValidGameHeapPtr(_lastValidInvMgrPtr)) {
+            invMgr = _lastValidInvMgrPtr;
+            WriteBytes(cf + OFF_DATA_INV_MGR_PTR, BitConverter.GetBytes(invMgr));
+        }
 
-        for (int c = 0; c < contCnt; c++) {
-            long contPtr = BitConverter.ToInt64(ptrBuf, c * 8);
+        var candidateContainers = new List<long>();
+        if (IsValidGameHeapPtr(invMgr)) {
+            long[] arrOffs = new long[] { 0x18, 0xD0 };
+            long[] cntOffs = new long[] { 0x20, 0xB8 };
+            for (int k = 0; k < arrOffs.Length; k++) {
+                long contArr = ReadI64(invMgr + arrOffs[k]);
+                int contCnt = ReadI32(invMgr + cntOffs[k]);
+                if (IsValidGameHeapPtr(contArr) && contCnt >= 1 && contCnt <= 32) {
+                    byte[] ptrBuf = ReadBytes(contArr, contCnt * 8);
+                    if (ptrBuf != null && ptrBuf.Length >= contCnt * 8) {
+                        for (int c = 0; c < contCnt; c++) {
+                            long cp = BitConverter.ToInt64(ptrBuf, c * 8);
+                            if (IsValidGameHeapPtr(cp) && !candidateContainers.Contains(cp)) candidateContainers.Add(cp);
+                        }
+                    }
+                }
+            }
+        }
+        long bagCont = ReadI64(cf + OFF_DATA_BAG_CONT_PTR);
+        if (IsValidGameHeapPtr(bagCont)) {
+            _lastValidBagContPtr = bagCont;
+            if (!candidateContainers.Contains(bagCont)) candidateContainers.Insert(0, bagCont);
+        } else if (IsValidGameHeapPtr(_lastValidBagContPtr)) {
+            WriteBytes(cf + OFF_DATA_BAG_CONT_PTR, BitConverter.GetBytes(_lastValidBagContPtr));
+            if (!candidateContainers.Contains(_lastValidBagContPtr)) candidateContainers.Add(_lastValidBagContPtr);
+        }
+        if (candidateContainers.Count == 0) return false;
+
+        for (int c = 0; c < candidateContainers.Count; c++) {
+            long contPtr = candidateContainers[c];
             if (!IsValidGameHeapPtr(contPtr)) continue;
             byte[] hdr = ReadBytes(contPtr, 0x14);
             if (hdr == null || hdr.Length < 0x12) continue;
@@ -764,9 +804,15 @@ internal static class LiveMemoryCheatEngine {
             ushort slotCap = BitConverter.ToUInt16(hdr, 0x0C);
             ushort invKey = BitConverter.ToUInt16(hdr, 0x10);
             if (!IsValidGameHeapPtr(itemsBase) || slotCap < 1 || slotCap > 2048) continue;
-            if (invKey != 2 && !(sanitizeArrows && invKey == 8)) continue;
+            if (invKey == 2 || !IsValidGameHeapPtr(_lastValidBagContPtr)) {
+                _lastValidBagContPtr = contPtr;
+                WriteBytes(cf + OFF_DATA_BAG_CONT_PTR, BitConverter.GetBytes(contPtr));
+            }
 
             byte[] itemsBuf = ReadBytes(itemsBase, slotCap * 0xC8);
+            if (itemsBuf == null && slotCap > 128) itemsBuf = ReadBytes(itemsBase, 128 * 0xC8);
+            if (itemsBuf == null && slotCap > 32)  itemsBuf = ReadBytes(itemsBase, 32 * 0xC8);
+            if (itemsBuf == null && slotCap > 8)   itemsBuf = ReadBytes(itemsBase, 8 * 0xC8);
             if (itemsBuf == null || itemsBuf.Length < 0xC8) continue;
             int actualSlots = Math.Min((int)slotCap, itemsBuf.Length / 0xC8);
             for (int s = 0; s < actualSlots; s++) {
@@ -786,15 +832,17 @@ internal static class LiveMemoryCheatEngine {
                         WriteBytes(recPtr + 0x10, BitConverter.GetBytes(cleanArrows));
                         EngLog(string.Format("SanitizeArrows LIVE invKey={0} slot={1} @0x{2:X}: {3} -> {4}", invKey, s, recPtr, stack, cleanArrows));
                     }
-                } else if (invKey == 2 && realItemKey == 1 && silverRecordPtr == 0) {
+                } else if (realItemKey == 1 && (silverRecordPtr == 0 || invKey == 2)) {
                     long recPtr = itemsBase + (long)s * 0xC8L;
                     if (TryVerifyRecordItemKey(recPtr, 1)) {
                         silverRecordPtr = recPtr;
                         currentSilver = ReadI64(recPtr + 0x10);
+                        _lastValidBagContPtr = contPtr;
+                        WriteBytes(cf + OFF_DATA_BAG_CONT_PTR, BitConverter.GetBytes(contPtr));
                     }
                 }
             }
-            if (silverRecordPtr != 0 && !sanitizeArrows) break;
+            if (silverRecordPtr != 0 && invKey == 2 && !sanitizeArrows) break;
         }
 
         if (silverRecordPtr != 0 && currentSilver >= 0) {
@@ -895,12 +943,6 @@ internal static class LiveMemoryCheatEngine {
         if (hookFriendlyAddInstalled)  { WriteBytes(baseAddr + RVA_FRIENDLY_ADD,  VANILLA_FRIENDLY_ADD);  hookFriendlyAddInstalled = false; }
         if (hookCountItemsInstalled)   { WriteBytes(baseAddr + RVA_COUNT_ITEMS,   VANILLA_COUNT_ITEMS);   hookCountItemsInstalled = false; }
         if (hookWantedEvalInstalled)   { WriteBytes(baseAddr + RVA_WANTED_EVAL,   VANILLA_WANTED_EVAL);   hookWantedEvalInstalled = false; }
-        if (caveFling != IntPtr.Zero) {
-            long cf = caveFling.ToInt64();
-            WriteBytes(cf + OFF_DATA_PLAYER, new byte[8]);
-            WriteBytes(cf + OFF_DATA_P_STA_PTR, new byte[8]);
-            WriteBytes(cf + OFF_DATA_P_SPI_PTR, new byte[8]);
-        }
     }
 
     public static bool IsExternalFlingTrainerRunning() {
@@ -1069,14 +1111,23 @@ internal static class LiveMemoryCheatEngine {
         _arrowSanitizedPid = 0;
         if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero) return;
         long cf = caveFling.ToInt64();
+        long curInv = ReadI64(cf + OFF_DATA_INV_MGR_PTR);
+        if (IsValidGameHeapPtr(curInv)) _lastValidInvMgrPtr = curInv;
+        long curBag = ReadI64(cf + OFF_DATA_BAG_CONT_PTR);
+        if (IsValidGameHeapPtr(curBag)) _lastValidBagContPtr = curBag;
+        long curSilPtr = ReadI64(cf + OFF_DATA_SILVER_PTR);
+        if (IsValidGameHeapPtr(curSilPtr)) _lastValidSilverPtr = curSilPtr;
         byte[] z8 = new byte[8];
         WriteBytes(cf + OFF_DATA_PLAYER, z8);
-        WriteBytes(cf + OFF_DATA_SILVER_PTR, z8);
-        WriteBytes(cf + OFF_DATA_CUR_SILVER, z8);
         WriteBytes(cf + OFF_DATA_P_STA_PTR, z8);
         WriteBytes(cf + OFF_DATA_P_SPI_PTR, z8);
         WriteBytes(cf + OFF_DATA_SEL_PTR, z8);
-        WriteBytes(cf + OFF_DATA_INV_MGR_PTR, z8);
+        WriteBytes(cf + OFF_DATA_PREV_STA, z8);
+        WriteBytes(cf + OFF_DATA_PREV_SPI, z8);
+        WriteBytes(cf + OFF_DATA_PREV_MSTA, z8);
+        WriteBytes(cf + OFF_DATA_PREV_HP, z8);
+        if (!IsValidGameHeapPtr(curSilPtr)) WriteBytes(cf + OFF_DATA_SILVER_PTR, z8);
+        if (!IsValidGameHeapPtr(curInv)) WriteBytes(cf + OFF_DATA_INV_MGR_PTR, z8);
     }
 
     public static bool IsWorldLoadedAndSettled(int pid, long workingSetBytes, double uptimeSec, out string loadStatus) {
@@ -1255,13 +1306,37 @@ internal static class LiveMemoryCheatEngine {
         return SyncWithGameCore(st);
     }
 
+    static void EnsureFastJumpPollerRunning() {
+        if (_fastJumpPollTimer != null) return;
+        _fastJumpPollTimer = new System.Threading.Timer(delegate {
+            try {
+                if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero || attachedPid == 0) return;
+                EditorCheatState st = _lastSyncedState;
+                if (st == null || st.JumpMultiplier <= 1.05f || st.SpecialConvenienceMode == 3) return;
+                IntPtr fg = GetForegroundWindow();
+                if (fg == IntPtr.Zero) return;
+                uint fgPid;
+                GetWindowThreadProcessId(fg, out fgPid);
+                if (fgPid != (uint)attachedPid) return;
+                bool sp = ((GetAsyncKeyState(0x20) & 0x8000) != 0);
+                long cf = caveFling.ToInt64();
+                if (sp && !wasSpaceDown) {
+                    lastJumpTriggerUtc = DateTime.UtcNow;
+                    WriteCaveParam(cf + OFF_DATA_KISS_MAXY, BitConverter.GetBytes(-100.0f));
+                    WriteCaveParam(cf + OFF_DATA_KISS_STATE, BitConverter.GetBytes(2));
+                } else if (!sp && (DateTime.UtcNow - lastJumpTriggerUtc).TotalMilliseconds >= 340.0) {
+                    int baseState = ((st.SpecialConvenienceMode == 2) || GlideNoFallEnabled) ? 3 : 0;
+                    WriteCaveParam(cf + OFF_DATA_KISS_STATE, BitConverter.GetBytes(baseState));
+                }
+                wasSpaceDown = sp;
+            } catch { }
+        }, null, 20, 20);
+    }
+
     static string SyncWithGameCore(EditorCheatState st) {
         try {
-            // Priority 1: Yield immediately whenever External FLiNG Trainer is running or recently launched
-            if (ExtFlingRunning()) {
-                if (hProc != IntPtr.Zero && baseAddr != 0) RevertAllHooks();
-                return "외부 FLiNG 트레이너 연동 대기 (내부 후크 안전 양보 중)";
-            }
+            EnsureFastJumpPollerRunning();
+            bool extFlingActive = ExtFlingRunning();
 
             if (cachedProc != null) {
                 bool alive = false;
@@ -1341,16 +1416,27 @@ internal static class LiveMemoryCheatEngine {
             int pStaMode = Math.Max(0, Math.Min(4, st.PlayerStaminaMode));
             int cdMode = Math.Max(0, Math.Min(4, st.CooldownMode));
             int mStaMode = Math.Max(0, Math.Min(4, st.MountStaminaMode));
+            int dmgTakenMode = Math.Max(0, Math.Min(4, st.DamageTakenMode));
 
-            WriteCaveParam(cf + OFF_DATA_GODMODE,       BitConverter.GetBytes(bGodMode));
-            WriteCaveParam(cf + OFF_DATA_STAMINA_MODE,  BitConverter.GetBytes(pStaMode));
-            WriteCaveParam(cf + OFF_DATA_COOLDOWN_MODE, BitConverter.GetBytes(cdMode));
-            WriteCaveParam(cf + OFF_DATA_MOUNT_STA,     BitConverter.GetBytes(mStaMode));
-            WriteCaveParam(cf + OFF_DATA_DEFENSE,       BitConverter.GetBytes(actualDefVal));
-            WriteCaveParam(cf + OFF_DATA_DMG_MODE,      BitConverter.GetBytes(dmgModeVal));
-            WriteCaveParam(cf + OFF_DATA_MAX_HP,        BitConverter.GetBytes(st.MaxHealthVal));
-            WriteCaveParam(cf + OFF_DATA_MAX_STA,       BitConverter.GetBytes(st.MaxStaminaVal));
-            WriteCaveParam(cf + OFF_DATA_MAX_SPIRIT,    BitConverter.GetBytes(st.MaxSpiritVal));
+            WriteCaveParam(cf + OFF_DATA_GODMODE,        BitConverter.GetBytes(bGodMode));
+            WriteCaveParam(cf + OFF_DATA_DMG_TAKEN_MODE, BitConverter.GetBytes(dmgTakenMode));
+            WriteCaveParam(cf + OFF_DATA_STAMINA_MODE,   BitConverter.GetBytes(pStaMode));
+            WriteCaveParam(cf + OFF_DATA_COOLDOWN_MODE,  BitConverter.GetBytes(cdMode));
+            WriteCaveParam(cf + OFF_DATA_MOUNT_STA,      BitConverter.GetBytes(mStaMode));
+            WriteCaveParam(cf + OFF_DATA_DEFENSE,        BitConverter.GetBytes(actualDefVal));
+            WriteCaveParam(cf + OFF_DATA_DMG_MODE,       BitConverter.GetBytes(dmgModeVal));
+            WriteCaveParam(cf + OFF_DATA_MAX_HP,         BitConverter.GetBytes(st.MaxHealthVal));
+            WriteCaveParam(cf + OFF_DATA_MAX_STA,        BitConverter.GetBytes(st.MaxStaminaVal));
+            WriteCaveParam(cf + OFF_DATA_MAX_SPIRIT,     BitConverter.GetBytes(st.MaxSpiritVal));
+
+            if (extFlingActive) {
+                WriteFlingCtl(FLING_ADDR_GODMODE,   BitConverter.GetBytes(bGodMode));
+                WriteFlingCtl(FLING_ADDR_STAMINA,   BitConverter.GetBytes(pStaMode > 0 ? 1 : 0));
+                WriteFlingCtl(FLING_ADDR_SPIRIT,    BitConverter.GetBytes(cdMode > 0 ? 1 : 0));
+                WriteFlingCtl(FLING_ADDR_MOUNT_STA, BitConverter.GetBytes(mStaMode > 0 ? 1 : 0));
+                WriteFlingCtl(FLING_ADDR_DEFENSE,   BitConverter.GetBytes(actualDefVal > 0 ? Math.Max(1, actualDefVal / 100) : 0));
+                WriteFlingCtl(FLING_ADDR_DMG,       BitConverter.GetBytes(dmgModeVal));
+            }
 
             // Craft & Gear & Imbue
             WriteCaveParam(cf + OFF_DATA_DUR_MODE,   BitConverter.GetBytes(Math.Max(0, Math.Min(4, st.DurabilityMode))));
@@ -1455,27 +1541,27 @@ internal static class LiveMemoryCheatEngine {
                 WriteCaveParam(cf + OFF_DATA_KISS_STATE, BitConverter.GetBytes(4));
             } else {
                 WriteCaveParam(cf + OFF_DATA_FLY_LIFTY, BitConverter.GetBytes(0.0f));
-                if ((DateTime.UtcNow - lastJumpTriggerUtc).TotalMilliseconds >= 180.0) {
+                if ((DateTime.UtcNow - lastJumpTriggerUtc).TotalMilliseconds >= 340.0) {
                     WriteCaveParam(cf + OFF_DATA_KISS_STATE, BitConverter.GetBytes(baseKissState));
                 }
             }
 
             // 2. Compute Need-State for Every Single Verified Hook Site
-            bool needStats = (bGodMode != 0 || pStaMode != 0 || cdMode != 0 || mStaMode != 0 ||
-                              st.MaxHealthVal > 0 || st.MaxStaminaVal > 0 || st.MaxSpiritVal > 0 ||
-                              st.WeaponImbueMode == 4 || st.WeaponImbueMode == 5 || sleepHeal != 0 ||
-                              st.MountSpeedMultiplier > 1.01f);
+            bool needStats = true;
             bool needDefense = (actualDefVal > 0);
             bool needDmg = (dmgModeVal > 0 || st.WeaponImbueMode > 0);
-            bool needPlayer = (needStats || needDefense || needDmg);
-            bool needCommit = (bGodMode != 0 || pStaMode != 0 || cdMode != 0 || mStaMode != 0);
+            bool needPlayer = true;
+            bool needCommit = (bGodMode != 0 || dmgTakenMode != 0 || pStaMode != 0 || cdMode != 0 || mStaMode != 0);
 
             byte[] pendingGoldB = ReadBytes(cf + OFF_DATA_PEND_GOLD, 8);
             long pendingGoldVal = pendingGoldB != null ? BitConverter.ToInt64(pendingGoldB, 0) : 0;
             byte[] editHoverB = ReadBytes(cf + OFF_DATA_EDIT_AMT, 8);
             long editHoverVal = editHoverB != null ? BitConverter.ToInt64(editHoverB, 0) : 0;
-            bool needSaveItem = (pendingGoldVal > 0 || editHoverVal > 0 || st.CraftMaterialCost > 0);
-            bool needSelectedItem = (pendingGoldVal > 0 || editHoverVal > 0);
+            long invMgrVal = ReadI64(cf + OFF_DATA_INV_MGR_PTR);
+            long bagContVal = ReadI64(cf + OFF_DATA_BAG_CONT_PTR);
+            bool silverPtrValid = IsValidGameHeapPtr(ReadI64(cf + OFF_DATA_SILVER_PTR));
+            bool needSaveItem = (pendingGoldVal > 0 || editHoverVal > 0 || st.CraftMaterialCost > 0 || !silverPtrValid);
+            bool needSelectedItem = (pendingGoldVal > 0 || editHoverVal > 0 || !silverPtrValid);
 
             bool needKiss = (effSpeed > 1.01f || st.JumpMultiplier > 1.05f || noFallActive || freeFlightActive ||
                              st.UnderwaterSpeedMultiplier > 1.01f || st.MountSpeedMultiplier > 1.01f);
@@ -1485,15 +1571,13 @@ internal static class LiveMemoryCheatEngine {
             bool needCrime = (st.ThiefDetectionMode > 0 || st.PickpocketSuccessMode > 0 || st.BountyImmunityMode > 0 || st.ThiefGloveMode == 3);
             bool needTaming = (st.AnimalTamingMode > 0);
             bool needBreath = (st.UnderwaterOxygenMode > 0 || st.UnderwaterSpeedMultiplier > 1.01f);
-            long invMgrVal = ReadI64(cf + OFF_DATA_INV_MGR_PTR);
             bool needSlotExpand = (st.BagExpandSlots > 0 || invMgrVal == 0 || pendingGoldVal > 0);
             bool needRomance = (st.RomanceMultiplier > 1.05f);
-            bool needCountItems = (st.CraftMaterialCost > 0);
+            bool needCountItems = (st.CraftMaterialCost > 0 || invMgrVal == 0 || pendingGoldVal > 0);
             bool needWanted = (st.BountyImmunityMode > 0 || st.ThiefGloveMode == 3);
 
-            if (invMgrVal != 0) {
+            if (invMgrVal != 0 || bagContVal != 0 || _lastValidInvMgrPtr != 0 || _lastValidBagContPtr != 0) {
                 bool doSanitize = (_arrowSanitizedPid != attachedPid);
-                bool silverPtrValid = IsValidGameHeapPtr(ReadI64(cf + OFF_DATA_SILVER_PTR));
                 bool needFullBagScan = doSanitize || pendingGoldVal > 0 || !silverPtrValid || (DateTime.UtcNow - _lastFullSilverScanUtc).TotalSeconds >= 12.0;
                 if (needFullBagScan) {
                     long foundSPtr, foundSil;
@@ -1574,13 +1658,62 @@ internal static class LiveMemoryCheatEngine {
 
     static void WriteLiveEditorHealth(long cf, int activeCount, string loadStatus, long liveSilver) {
         try {
-            byte[] d = ReadBytes(cf + DATA_BASE_OFF, 0x188);
-            if (d == null || d.Length < 0x178) return;
+            byte[] d = ReadBytes(cf + DATA_BASE_OFF, 0x200);
+            if (d == null || d.Length < 0x1C0) return;
             var inv = System.Globalization.CultureInfo.InvariantCulture;
 
             long playerPtr = BitConverter.ToInt64(d, (int)(OFF_DATA_PLAYER - DATA_BASE_OFF));
             long staPtr = BitConverter.ToInt64(d, (int)(OFF_DATA_P_STA_PTR - DATA_BASE_OFF));
             long spiPtr = BitConverter.ToInt64(d, (int)(OFF_DATA_P_SPI_PTR - DATA_BASE_OFF));
+            long invMgrPtr = BitConverter.ToInt64(d, (int)(OFF_DATA_INV_MGR_PTR - DATA_BASE_OFF));
+            long bagContPtr = BitConverter.ToInt64(d, (int)(OFF_DATA_BAG_CONT_PTR - DATA_BASE_OFF));
+
+            if (IsValidGameHeapPtr(playerPtr)) {
+                _lastValidPlayerPtr = playerPtr;
+            } else if (IsValidGameHeapPtr(_lastValidPlayerPtr)) {
+                playerPtr = _lastValidPlayerPtr;
+                WriteBytes(cf + OFF_DATA_PLAYER, BitConverter.GetBytes(playerPtr));
+            }
+            if (!IsValidGameHeapPtr(staPtr) || !IsValidGameHeapPtr(spiPtr)) {
+                if (IsValidGameHeapPtr(playerPtr)) {
+                    long statComp = ReadI64(playerPtr + 0x18);
+                    long statArr = IsValidGameHeapPtr(statComp) ? ReadI64(statComp + 0x58) : 0;
+                    if (IsValidGameHeapPtr(statArr)) {
+                        for (int k = 0; k < 24; k++) {
+                            long rec = statArr + k * 0x30L;
+                            ushort stId = ReadU16(rec);
+                            long mx = ReadI64(rec + 0x18);
+                            if (mx <= 0 || mx > 1000000000L) continue;
+                            if (stId == 17 && !IsValidGameHeapPtr(staPtr)) staPtr = rec;
+                            else if (stId == 18 && !IsValidGameHeapPtr(spiPtr)) spiPtr = rec;
+                        }
+                        if (!IsValidGameHeapPtr(staPtr) && ReadI64(statArr + 0x30L + 0x18L) > 0) staPtr = statArr + 0x30L;
+                        if (!IsValidGameHeapPtr(spiPtr)) {
+                            long candSpi = IsValidGameHeapPtr(staPtr) ? (staPtr + 0x30L) : (statArr + 0x60L);
+                            if (ReadI64(candSpi + 0x18L) > 0) spiPtr = candSpi;
+                        }
+                    }
+                }
+            }
+            if (IsValidGameHeapPtr(staPtr)) {
+                _lastValidStaPtr = staPtr;
+                WriteBytes(cf + OFF_DATA_P_STA_PTR, BitConverter.GetBytes(staPtr));
+            } else if (IsValidGameHeapPtr(_lastValidStaPtr)) {
+                staPtr = _lastValidStaPtr;
+                WriteBytes(cf + OFF_DATA_P_STA_PTR, BitConverter.GetBytes(staPtr));
+            }
+            if (IsValidGameHeapPtr(spiPtr)) {
+                _lastValidSpiPtr = spiPtr;
+                WriteBytes(cf + OFF_DATA_P_SPI_PTR, BitConverter.GetBytes(spiPtr));
+            } else if (IsValidGameHeapPtr(_lastValidSpiPtr)) {
+                spiPtr = _lastValidSpiPtr;
+                WriteBytes(cf + OFF_DATA_P_SPI_PTR, BitConverter.GetBytes(spiPtr));
+            }
+            if (IsValidGameHeapPtr(invMgrPtr)) _lastValidInvMgrPtr = invMgrPtr;
+            else if (IsValidGameHeapPtr(_lastValidInvMgrPtr)) invMgrPtr = _lastValidInvMgrPtr;
+            if (IsValidGameHeapPtr(bagContPtr)) _lastValidBagContPtr = bagContPtr;
+            else if (IsValidGameHeapPtr(_lastValidBagContPtr)) bagContPtr = _lastValidBagContPtr;
+            int hMountSeen = BitConverter.ToInt32(d, (int)(OFF_DATA_MOUNT_SEEN - DATA_BASE_OFF));
             int hCommit = BitConverter.ToInt32(d, (int)(OFF_DATA_COMMIT_CNT - DATA_BASE_OFF));
             int hDur    = BitConverter.ToInt32(d, (int)(OFF_DATA_DUR_HITS - DATA_BASE_OFF));
             int hCrime  = BitConverter.ToInt32(d, (int)(OFF_DATA_CRIME_HITS - DATA_BASE_OFF));
@@ -1690,6 +1823,13 @@ internal static class LiveMemoryCheatEngine {
                 "  \"player_ptr_valid\": {5},\r\n" +
                 "  \"sta_ptr_valid\": {6},\r\n" +
                 "  \"spi_ptr_valid\": {7},\r\n" +
+                "  \"player_ptr\": \"0x{22:X}\",\r\n" +
+                "  \"sta_ptr\": \"0x{23:X}\",\r\n" +
+                "  \"spi_ptr\": \"0x{24:X}\",\r\n" +
+                "  \"inv_mgr_ptr\": \"0x{25:X}\",\r\n" +
+                "  \"bag_cont_ptr\": \"0x{26:X}\",\r\n" +
+                "  \"mount_seen\": {27},\r\n" +
+                "  \"fast_jump_poller_active\": {28},\r\n" +
                 "  \"live_silver\": {8},\r\n" +
                 "  \"installed_hooks\": [{9}],\r\n" +
                 "  \"hit_counters\": {{\"commit\": {10}, \"dur\": {11}, \"crime\": {12}, \"tame\": {13}, \"breath\": {14}, \"slot\": {15}, \"save\": {16}, \"sel\": {17}, \"rom\": {18}, \"cnt\": {19}, \"wanted\": {20}}},\r\n" +
@@ -1706,7 +1846,9 @@ internal static class LiveMemoryCheatEngine {
                 liveSilver,
                 hooksJoined,
                 hCommit, hDur, hCrime, hTame, hBreath, hSlot, hSave, hSel, hRom, hCnt, hWanted,
-                caveValuesJson
+                caveValuesJson,
+                playerPtr, staPtr, spiPtr, invMgrPtr, bagContPtr, hMountSeen,
+                (_fastJumpPollTimer != null) ? "true" : "false"
             );
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -1966,12 +2108,18 @@ internal static class LiveMemoryCheatEngine {
         long dConstOne   = cf + OFF_DATA_CONST_ONE;
         long dFlyLift    = cf + OFF_DATA_FLY_LIFTY;
         long dUnderwater = cf + OFF_DATA_UNDERWATER;
-        long dSwimMult   = cf + OFF_DATA_SWIM_MULT;
-        long dPrevBreath = cf + OFF_DATA_PREV_BREATH;
-        long dNpcMgrPtr  = cf + OFF_DATA_NPC_MGR_PTR;
+        long dSwimMult     = cf + OFF_DATA_SWIM_MULT;
+        long dPrevBreath   = cf + OFF_DATA_PREV_BREATH;
+        long dNpcMgrPtr    = cf + OFF_DATA_NPC_MGR_PTR;
+        long dPrevSta      = cf + OFF_DATA_PREV_STA;
+        long dPrevSpi      = cf + OFF_DATA_PREV_SPI;
+        long dPrevMSta     = cf + OFF_DATA_PREV_MSTA;
+        long dPrevHp       = cf + OFF_DATA_PREV_HP;
+        long dBagContPtr   = cf + OFF_DATA_BAG_CONT_PTR;
+        long dDmgTakenMode = cf + OFF_DATA_DMG_TAKEN_MODE;
 
         // ---------------------------------------------------------------------
-        // 1. RVA_PLAYER (cf + 0x0000, 8B) -> Captures ServerStatusActorComponent
+        // 1. RVA_PLAYER (cf + 0x0000, 8B) -> Captures ServerStatusActorComponent + InventoryManager*
         // ---------------------------------------------------------------------
         {
             var code = new List<byte>();
@@ -1980,8 +2128,41 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x3D, 0x00, 0x00, 0x01, 0x00 }); // cmp rax, 0x10000
             EmitJcc32(code, refs, 0x82, "skip_rax");
             code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x20 });             // mov rbx, [rax+0x20]
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "skip_dplayer");
             code.AddRange(new byte[] { 0x48, 0x89, 0x1D });
             code.AddRange(BitConverter.GetBytes((int)(dPlayer - (cf + OFF_CODE_PLAYER + code.Count + 4))));
+            lbl["skip_dplayer"] = code.Count;
+            code.AddRange(new byte[] { 0x48, 0x81, 0xF9, 0x00, 0x00, 0x00, 0x10 }); // cmp rcx, 0x10000000 (PlayerActor*)
+            EmitJcc32(code, refs, 0x82, "try_direct_inv");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x99, 0xA0, 0x00, 0x00, 0x00 }); // mov rbx, [rcx+0xA0]
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "try_direct_inv");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x9B, 0xD0, 0x00, 0x00, 0x00 }); // mov rbx, [rbx+0xD0]
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "try_direct_inv");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x5B, 0x68 });                   // mov rbx, [rbx+0x68]
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "try_direct_inv");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x9B, 0xB8, 0x00, 0x00, 0x00 }); // mov rbx, [rbx+0xB8] (InventoryManager*)
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "try_direct_inv");
+            code.AddRange(new byte[] { 0x83, 0x7B, 0x20, 0x00 });                   // cmp dword ptr [rbx+0x20], 0 (contCnt > 0)
+            EmitJcc32(code, refs, 0x8F, "store_inv");
+            lbl["try_direct_inv"] = code.Count;
+            code.AddRange(new byte[] { 0x48, 0x83, 0x3D });
+            code.AddRange(BitConverter.GetBytes((int)(dInvMgrPtr - (cf + OFF_CODE_PLAYER + code.Count + 5))));
+            code.Add(0x00);                                                         // cmp qword ptr [dInvMgrPtr], 0
+            EmitJcc32(code, refs, 0x85, "skip_inv");                                // keep existing verified dInvMgrPtr
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x98, 0xB8, 0x00, 0x00, 0x00 }); // mov rbx, [rax+0xB8]
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x00, 0x10 }); // cmp rbx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "skip_inv");
+            code.AddRange(new byte[] { 0x83, 0x7B, 0x20, 0x00 });                   // cmp dword ptr [rbx+0x20], 0 (contCnt > 0)
+            EmitJcc32(code, refs, 0x8E, "skip_inv");
+            lbl["store_inv"] = code.Count;
+            code.AddRange(new byte[] { 0x48, 0x89, 0x1D });
+            code.AddRange(BitConverter.GetBytes((int)(dInvMgrPtr - (cf + OFF_CODE_PLAYER + code.Count + 4))));
+            lbl["skip_inv"] = code.Count;
             code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x40 });             // mov rbx, [rax+0x40]
             code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0x00, 0x01, 0x00 }); // cmp rbx, 0x10000
             EmitJcc32(code, refs, 0x82, "skip_rbx");
@@ -2000,8 +2181,12 @@ internal static class LiveMemoryCheatEngine {
 
         // ---------------------------------------------------------------------
         // 2. RVA_STATS (cf + 0x0100, 8B) -> Player & Mount Health/Stamina/Spirit + Lifesteal + Ptr Capture
+        //    CRITICAL: In FUNC_STATS (0x01559873), ECX holds the integer Stat ID (0=HP, 17=Stamina, 18=Spirit)
+        //    loaded at 0x0155984C (`mov ecx, [rax+14h]`), while `[rax]` is the 64-bit descriptor pointer!
+        //    After `push rbx, rcx, rdx`, `[rsp+0x08]` holds the saved ECX Stat ID!
         // ---------------------------------------------------------------------
         {
+            long stBase = cf + OFF_CODE_STATS;
             var code = new List<byte>();
             var refs = new List<Rel32Ref>();
             var lbl = new Dictionary<string, int>();
@@ -2010,7 +2195,7 @@ internal static class LiveMemoryCheatEngine {
             EmitJcc32(code, refs, 0x82, "ret");
             code.AddRange(new byte[] { 0x48, 0x81, 0xFE, 0x00, 0x00, 0x01, 0x00 }); // cmp rsi, 0x10000
             EmitJcc32(code, refs, 0x82, "ret");
-            code.AddRange(new byte[] { 0x53, 0x51, 0x52 });                   // push rbx, rcx, rdx
+            code.AddRange(new byte[] { 0x53, 0x51, 0x52 });                   // push rbx, rcx, rdx ([rsp+8] = Stat ID in ecx!)
 
             code.AddRange(new byte[] { 0x48, 0x89, 0xC1, 0x48, 0xC1, 0xE9, 0x2F }); // shr rax copy >> 47
             EmitJcc32(code, refs, 0x85, "done");
@@ -2022,11 +2207,19 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x89, 0xD9, 0x48, 0xC1, 0xE9, 0x2F });
             EmitJcc32(code, refs, 0x85, "done");
 
+            code.AddRange(new byte[] { 0x48, 0x3B, 0x73, 0x18 });             // cmp rsi, [rbx+0x18] (StatComponent* == dPlayer->StatComponent*)
+            EmitJcc32(code, refs, 0x84, "is_player");
             code.AddRange(new byte[] { 0x48, 0x39, 0x1E });                   // cmp [rsi], rbx
+            EmitJcc32(code, refs, 0x84, "is_player");
+            code.AddRange(new byte[] { 0x48, 0x39, 0xDE });                   // cmp rsi, rbx
             EmitJcc32(code, refs, 0x85, "not_player");
+            lbl["is_player"] = code.Count;
+
+            // Load true 16-bit Stat ID from [rsp+0x38] (saved at 0x0155983C) + 0x18 (3 pushes) = [rsp+0x50]
+            code.AddRange(new byte[] { 0x0F, 0xB7, 0x4C, 0x24, 0x50 });       // movzx ecx, word ptr [rsp+0x50]
 
             // --- Player Health (id 0) ---
-            code.AddRange(new byte[] { 0x83, 0x38, 0x00 });                   // cmp dword [rax], 0
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x00 });                   // cmp ecx, 0
             EmitJcc32(code, refs, 0x85, "p_chk_sta");
             EmitMovabsRdx(code, dMaxHp);
             code.AddRange(new byte[] { 0x8B, 0x12, 0x85, 0xD2 });             // mov edx, [dMaxHp]; test edx, edx
@@ -2049,20 +2242,24 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x89, 0x4B, 0x08 });             // clamp cur = max
             lbl["p_ls_ok"] = code.Count;
             code.AddRange(new byte[] { 0x58 });                               // pop rax
+            EmitRipIncDword(code, stBase, dCommitCnt);
             lbl["p_hp_god2"] = code.Count;
             EmitMovabsRdx(code, dGodMode);
             code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dGodMode]
             EmitMovabsRdx(code, dSleepTrig);
             code.AddRange(new byte[] { 0x0B, 0x0A });                         // or ecx, [dSleepTrig]
-            EmitJcc32(code, refs, 0x84, "done");
-            code.AddRange(new byte[] { 0x48, 0x8B, 0x50, 0x18, 0x48, 0x85, 0xD2 });
-            EmitJcc32(code, refs, 0x8E, "done");
-            code.AddRange(new byte[] { 0x48, 0x89, 0x50, 0x08 });
-            EmitJmp32(code, refs, "done");
+            EmitMovabsRdx(code, dPrevHp);                                     // rdx = &dPrevHp
+            EmitJcc32(code, refs, 0x85, "fill_max_and_save");                 // GodMode or SleepHeal -> lock max!
+            EmitMovabsRdx(code, dDmgTakenMode);
+            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dDmgTakenMode] (0..3)
+            EmitMovabsRdx(code, dPrevHp);                                     // rdx = &dPrevHp
+            code.AddRange(new byte[] { 0x85, 0xC9 });
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            EmitJmp32(code, refs, "mode_123_to_pct");
 
             // --- Player Stamina (id 17) ---
             lbl["p_chk_sta"] = code.Count;
-            code.AddRange(new byte[] { 0x83, 0x38, 0x11 });
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x11 });                   // cmp ecx, 17
             EmitJcc32(code, refs, 0x85, "p_chk_spi");
             EmitMovabsRdx(code, dPStaPtr);
             code.AddRange(new byte[] { 0x48, 0x89, 0x02 });                   // [dPStaPtr] = rax
@@ -2072,20 +2269,31 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x63, 0xD2, 0x48, 0x69, 0xD2, 0xE8, 0x03, 0x00, 0x00, 0x48, 0x89, 0x50, 0x18 });
             lbl["p_sta_inf"] = code.Count;
             EmitMovabsRdx(code, dStaMode);
-            code.AddRange(new byte[] { 0x8B, 0x0A, 0x83, 0xF9, 0x04 });       // cmp [dStaMode], 4
-            EmitJcc32(code, refs, 0x84, "p_sta_fill");
+            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dStaMode]
             EmitMovabsRdx(code, dSleepTrig);
             code.AddRange(new byte[] { 0x83, 0x3A, 0x00 });
-            EmitJcc32(code, refs, 0x84, "done");
-            lbl["p_sta_fill"] = code.Count;
-            code.AddRange(new byte[] { 0x48, 0x8B, 0x50, 0x18, 0x48, 0x85, 0xD2 });
-            EmitJcc32(code, refs, 0x8E, "done");
-            code.AddRange(new byte[] { 0x48, 0x89, 0x50, 0x08 });
-            EmitJmp32(code, refs, "done");
+            EmitMovabsRdx(code, dPrevSta);                                    // rdx = &dPrevSta
+            EmitJcc32(code, refs, 0x85, "fill_max_and_save");
+            code.AddRange(new byte[] { 0x85, 0xC9 });
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });                   // mode 4 = Infinite Stamina
+            EmitJcc32(code, refs, 0x84, "fill_max_and_save");
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x03 });                   // mode 3 = 2x Regen + -30% drain
+            EmitJcc32(code, refs, 0x85, "mode_123_to_pct");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x1A, 0x48, 0x85, 0xDB }); // rbx = [dPrevSta]
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x48, 0x08, 0x48, 0x29, 0xD9 }); // rcx = cur - prev
+            EmitJcc32(code, refs, 0x8E, "sta_m3_drain");
+            code.AddRange(new byte[] { 0x48, 0x01, 0x48, 0x08 });             // regen > 0: add [rax+8], (cur - prev)
+            EmitRipIncDword(code, stBase, dCommitCnt);
+            EmitJmp32(code, refs, "clamp_inc_save");
+            lbl["sta_m3_drain"] = code.Count;
+            code.AddRange(new byte[] { 0xB9, 0x1E, 0x00, 0x00, 0x00 });       // mov ecx, 30 (refund 30% on drain)
+            EmitJmp32(code, refs, "apply_refund");
 
-            // --- Player Spirit (id 18) ---
+            // --- Player Spirit / Skill Cooldown (id 18) ---
             lbl["p_chk_spi"] = code.Count;
-            code.AddRange(new byte[] { 0x83, 0x38, 0x12 });
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x12 });                   // cmp ecx, 18
             EmitJcc32(code, refs, 0x85, "done");
             EmitMovabsRdx(code, dPSpiPtr);
             code.AddRange(new byte[] { 0x48, 0x89, 0x02 });                   // [dPSpiPtr] = rax
@@ -2095,29 +2303,73 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x63, 0xD2, 0x48, 0x69, 0xD2, 0xE8, 0x03, 0x00, 0x00, 0x48, 0x89, 0x50, 0x18 });
             lbl["p_spi_inf"] = code.Count;
             EmitMovabsRdx(code, dCdMode);
-            code.AddRange(new byte[] { 0x8B, 0x0A, 0x83, 0xF9, 0x04 });
-            EmitJcc32(code, refs, 0x84, "p_spi_fill");
+            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dCdMode]
             EmitMovabsRdx(code, dSleepTrig);
             code.AddRange(new byte[] { 0x83, 0x3A, 0x00 });
-            EmitJcc32(code, refs, 0x84, "done");
-            lbl["p_spi_fill"] = code.Count;
-            code.AddRange(new byte[] { 0x48, 0x8B, 0x50, 0x18, 0x48, 0x85, 0xD2 });
-            EmitJcc32(code, refs, 0x8E, "done");
-            code.AddRange(new byte[] { 0x48, 0x89, 0x50, 0x08 });
-            EmitJmp32(code, refs, "done");
+            EmitMovabsRdx(code, dPrevSpi);                                    // rdx = &dPrevSpi
+            EmitJcc32(code, refs, 0x85, "fill_max_and_save");
+            code.AddRange(new byte[] { 0x85, 0xC9 });
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });                   // mode 4 = Infinite Spirit / 0s Cooldown
+            EmitJcc32(code, refs, 0x84, "fill_max_and_save");
+            EmitJmp32(code, refs, "mode_123_to_pct");
 
             // --- Non-Player (Mount Stamina id 17) ---
             lbl["not_player"] = code.Count;
-            code.AddRange(new byte[] { 0x83, 0x38, 0x11 });
+            code.AddRange(new byte[] { 0x0F, 0xB7, 0x4C, 0x24, 0x50 });       // movzx ecx, word ptr [rsp+0x50] (Stat ID)
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x11 });                   // cmp ecx, 17
             EmitJcc32(code, refs, 0x85, "done");
             EmitMovabsRdx(code, dMountSeen);
             code.AddRange(new byte[] { 0xFF, 0x02 });                         // inc dword [dMountSeen]
             EmitMovabsRdx(code, dMStaMode);
-            code.AddRange(new byte[] { 0x83, 0x3A, 0x04 });                   // cmp [dMStaMode], 4
-            EmitJcc32(code, refs, 0x85, "done");
-            code.AddRange(new byte[] { 0x48, 0x8B, 0x50, 0x18, 0x48, 0x85, 0xD2 });
+            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dMStaMode]
+            EmitMovabsRdx(code, dPrevMSta);                                   // rdx = &dPrevMSta
+            code.AddRange(new byte[] { 0x85, 0xC9 });
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });
+            EmitJcc32(code, refs, 0x84, "fill_max_and_save");
+            EmitJmp32(code, refs, "mode_123_to_pct");
+
+            // --- Shared Proportional Refund & Max Lock Helpers ---
+            lbl["fill_max_and_save"] = code.Count;
+            EmitRipIncDword(code, stBase, dCommitCnt);
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x18, 0x48, 0x85, 0xDB }); // rbx = [rax+0x18]
             EmitJcc32(code, refs, 0x8E, "done");
-            code.AddRange(new byte[] { 0x48, 0x89, 0x50, 0x08 });
+            code.AddRange(new byte[] { 0x48, 0x89, 0x58, 0x08 });             // [rax+0x08] = rbx
+            EmitJmp32(code, refs, "save_prev");
+
+            lbl["mode_123_to_pct"] = code.Count;
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x01 });
+            EmitJcc32(code, refs, 0x84, "pct30");
+            code.AddRange(new byte[] { 0x83, 0xF9, 0x02 });
+            EmitJcc32(code, refs, 0x84, "pct50");
+            code.AddRange(new byte[] { 0xB9, 0x4B, 0x00, 0x00, 0x00 });       // 75% refund (-75% drain)
+            EmitJmp32(code, refs, "apply_refund");
+            lbl["pct30"] = code.Count;
+            code.AddRange(new byte[] { 0xB9, 0x1E, 0x00, 0x00, 0x00 });       // 30% refund (-30% drain)
+            EmitJmp32(code, refs, "apply_refund");
+            lbl["pct50"] = code.Count;
+            code.AddRange(new byte[] { 0xB9, 0x32, 0x00, 0x00, 0x00 });       // 50% refund (-50% drain)
+
+            lbl["apply_refund"] = code.Count;
+            EmitRipIncDword(code, stBase, dCommitCnt);
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x1A, 0x48, 0x85, 0xDB }); // rbx = [rdx] (prev)
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x48, 0x2B, 0x58, 0x08 });             // rbx = prev - cur (drain)
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x52, 0x50 });                         // push rdx; push rax
+            code.AddRange(new byte[] { 0x48, 0x89, 0xD8, 0x48, 0x63, 0xC9, 0x48, 0x0F, 0xAF, 0xC1 }); // rax = drain * pct
+            code.AddRange(new byte[] { 0x48, 0x99, 0xB9, 0x64, 0x00, 0x00, 0x00, 0x48, 0xF7, 0xF9 }); // rax = (drain * pct) / 100
+            code.AddRange(new byte[] { 0x48, 0x89, 0xC3, 0x58, 0x5A });       // rbx = refund; pop rax; pop rdx
+            code.AddRange(new byte[] { 0x48, 0x01, 0x58, 0x08 });             // add [rax+0x08], rbx
+
+            lbl["clamp_inc_save"] = code.Count;
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x18, 0x48, 0x39, 0x58, 0x08 }); // cmp [rax+8], [rax+18]
+            EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0x48, 0x89, 0x58, 0x08 });             // clamp [rax+8] = [rax+18]
+
+            lbl["save_prev"] = code.Count;
+            code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x08, 0x48, 0x89, 0x1A }); // [rdx] = [rax+0x08]
 
             lbl["done"] = code.Count;
             code.AddRange(new byte[] { 0x5A, 0x59, 0x5B });                   // pop rdx, rcx, rbx
@@ -2261,10 +2513,15 @@ internal static class LiveMemoryCheatEngine {
             EmitJcc32(code, refs, 0x82, "done");
             code.AddRange(new byte[] { 0x49, 0x81, 0xFE, 0x00, 0x00, 0x00, 0x10 });
             EmitJcc32(code, refs, 0x82, "done");
-            code.AddRange(new byte[] { 0x49, 0x39, 0x16 });
+            code.AddRange(new byte[] { 0x49, 0x39, 0xD6 });                   // cmp r14, rdx
+            EmitJcc32(code, refs, 0x84, "def_match");
+            code.AddRange(new byte[] { 0x49, 0x39, 0x16 });                   // cmp [r14], rdx
+            EmitJcc32(code, refs, 0x84, "def_match");
+            code.AddRange(new byte[] { 0x4C, 0x3B, 0x72, 0x18 });             // cmp r14, [rdx+0x18]
             EmitJcc32(code, refs, 0x85, "done");
+            lbl["def_match"] = code.Count;
             EmitMovabsRdx(code, dDef);
-            code.AddRange(new byte[] { 0x8B, 0x0A, 0x48, 0x69, 0xC9, 0xE8, 0x03, 0x00, 0x00 });
+            code.AddRange(new byte[] { 0x8B, 0x12, 0x48, 0x69, 0xD2, 0xE8, 0x03, 0x00, 0x00, 0x48, 0x01, 0xD1 }); // imul rdx, [dDef], 1000; add rcx, rdx
             lbl["done"] = code.Count;
             code.AddRange(new byte[] { 0x5A, 0x5B });
             ResolveLabels(code, lbl, refs);
@@ -2283,16 +2540,27 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x89, 0xCA });                         // mov edx, ecx
             code.AddRange(new byte[] { 0x44, 0x8B, 0x24, 0x88 });             // mov r12d, [rax+rcx*4]
             code.AddRange(new byte[] { 0x4A, 0x8B, 0x1C, 0xE3 });             // mov rbx, [rbx+r12*8]
-            code.AddRange(new byte[] { 0x83, 0xFA, 0x03 });
-            EmitJcc32(code, refs, 0x85, "done");
+            code.AddRange(new byte[] { 0x83, 0xFA, 0x02 });                   // offense stat id 2..6
+            EmitJcc32(code, refs, 0x82, "done");
+            code.AddRange(new byte[] { 0x83, 0xFA, 0x06 });
+            EmitJcc32(code, refs, 0x87, "done");
+            code.AddRange(new byte[] { 0x48, 0x85, 0xDB });                   // test rbx, rbx (> 0)
+            EmitJcc32(code, refs, 0x8E, "done");
+            code.AddRange(new byte[] { 0x48, 0x81, 0xFB, 0x00, 0xE1, 0xF5, 0x05 }); // cmp rbx, 100000000
+            EmitJcc32(code, refs, 0x8F, "done");
 
             EmitMovabsRdx(code, dPlayer);
             code.AddRange(new byte[] { 0x48, 0x8B, 0x12, 0x48, 0x81, 0xFA, 0x00, 0x00, 0x00, 0x10 });
             EmitJcc32(code, refs, 0x82, "done");
             code.AddRange(new byte[] { 0x49, 0x81, 0xFF, 0x00, 0x00, 0x00, 0x10 });
             EmitJcc32(code, refs, 0x82, "done");
+            code.AddRange(new byte[] { 0x49, 0x39, 0xD7 });                   // cmp r15, rdx
+            EmitJcc32(code, refs, 0x84, "dmg_match");
             code.AddRange(new byte[] { 0x49, 0x39, 0x17 });                   // cmp [r15], rdx
+            EmitJcc32(code, refs, 0x84, "dmg_match");
+            code.AddRange(new byte[] { 0x4C, 0x3B, 0x7A, 0x18 });             // cmp r15, [rdx+0x18]
             EmitJcc32(code, refs, 0x85, "done");
+            lbl["dmg_match"] = code.Count;
 
             EmitMovabsRdx(code, dDmg);
             code.AddRange(new byte[] { 0x8B, 0x12, 0x85, 0xD2 });             // edx = dmgModeVal
@@ -2374,6 +2642,8 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x66, 0x41, 0x83, 0x7D, 0x10, 0x02 }); // cmp word [r13+0x10], 2 (Player Bag)
             EmitJcc32(code, refs, 0x85, "done");
 
+            EmitMovabsRdx(code, dBagContPtr);
+            code.AddRange(new byte[] { 0x4C, 0x89, 0x2A });                   // [dBagContPtr] = r13
             EmitMovabsRdx(code, dSilverPtr);
             code.AddRange(new byte[] { 0x48, 0x89, 0x32 });                   // [dSilverPtr] = rsi
             code.AddRange(new byte[] { 0x48, 0x8B, 0x46, 0x10 });             // rax = [rsi+0x10]
@@ -2425,6 +2695,16 @@ internal static class LiveMemoryCheatEngine {
             var lbl = new Dictionary<string, int>();
             code.AddRange(new byte[] { 0x50, 0x51, 0x52 });                   // push rax, rcx, rdx
             EmitRipIncDword(code, slBase, cf + OFF_DATA_SEL_HITS);
+            code.AddRange(new byte[] { 0x4C, 0x89, 0xE8 });                   // mov rax, r13 (InventoryContainer*)
+            EmitCheckHeapPtrRax(code, refs, lbl, peLow, peHigh, "sl_after_bag");
+            EmitMovabsRdx(code, dBagContPtr);
+            code.AddRange(new byte[] { 0x66, 0x41, 0x83, 0x7D, 0x10, 0x02 }); // cmp word [r13+0x10], 2 (Player Bag)
+            EmitJcc32(code, refs, 0x84, "sl_store_bag");
+            code.AddRange(new byte[] { 0x48, 0x83, 0x3A, 0x00 });             // cmp qword [dBagContPtr], 0
+            EmitJcc32(code, refs, 0x85, "sl_after_bag");
+            lbl["sl_store_bag"] = code.Count;
+            code.AddRange(new byte[] { 0x4C, 0x89, 0x2A });                   // [dBagContPtr] = r13
+            lbl["sl_after_bag"] = code.Count;
             code.AddRange(new byte[] { 0x48, 0x89, 0xD8 });                   // mov rax, rbx
             EmitCheckHeapPtrRax(code, refs, lbl, peLow, peHigh, "done");
             code.AddRange(new byte[] { 0x48, 0x83, 0x7B, 0x10, 0x00 });
@@ -3063,13 +3343,23 @@ internal static class LiveMemoryCheatEngine {
         }
 
         // ---------------------------------------------------------------------
-        // 17. RVA_COUNT_ITEMS (cf + 0x2100, 10B) -> Safe Telemetry Hook
+        // 17. RVA_COUNT_ITEMS (cf + 0x2100, 10B) -> Captures InventoryManager* (rcx) + Telemetry
         // ---------------------------------------------------------------------
         {
             long ciBase = cf + OFF_CODE_COUNT_ITEMS;
             var code = new List<byte>();
+            var refs = new List<Rel32Ref>();
+            var lbl = new Dictionary<string, int>();
+            code.Add(0x50);                                                   // push rax
             EmitRipIncDword(code, ciBase, cf + OFF_DATA_CNT_HITS);
+            code.AddRange(new byte[] { 0x48, 0x81, 0xF9, 0x00, 0x00, 0x00, 0x10 }); // cmp rcx, 0x10000000
+            EmitJcc32(code, refs, 0x82, "ci_done");
+            EmitMovabsRax(code, dInvMgrPtr);
+            code.AddRange(new byte[] { 0x48, 0x89, 0x08 });                   // [dInvMgrPtr] = rcx
+            lbl["ci_done"] = code.Count;
+            code.Add(0x58);                                                   // pop rax
             code.AddRange(VANILLA_COUNT_ITEMS);
+            ResolveLabels(code, lbl, refs);
             EmitAbsJmp(code, baseAddr + RVA_COUNT_ITEMS + 10);
             WriteCaveSlot("COUNT_ITEMS", cf, OFF_CODE_COUNT_ITEMS, OFF_CODE_WANTED_EVAL, code.ToArray());
         }
@@ -3108,7 +3398,6 @@ internal static class LiveMemoryCheatEngine {
     // =========================================================================
     public static bool TriggerManualJumpImpulse(float impulse = 320.0f) {
         if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero || baseAddr == 0) return false;
-        if (ExtFlingRunning()) return false;
         string dummy;
         var procs = Process.GetProcessesByName("CrimsonDesert");
         try {
@@ -3121,6 +3410,7 @@ internal static class LiveMemoryCheatEngine {
         }
         long cf = caveFling.ToInt64();
         float scale = impulse > 10.0f ? Math.Max(0.5f, impulse / 320.0f) : Math.Max(0.0f, impulse);
+        lastJumpTriggerUtc = DateTime.UtcNow;
         WriteBytes(cf + OFF_DATA_KISS_JUMPSC, BitConverter.GetBytes(scale));
         WriteBytes(cf + OFF_DATA_KISS_STATE, BitConverter.GetBytes(2));
         SyncSingleHook("KISS", true, ref hookKissInstalled, baseAddr + RVA_KISS, cf + OFF_CODE_KISS, VANILLA_KISS);
@@ -3176,13 +3466,14 @@ internal static class LiveMemoryCheatEngine {
 
     public static long ReadExactSilverNow() {
         EnsureProcessAttached();
-        if (hProc != IntPtr.Zero && caveFling != IntPtr.Zero && !ExtFlingRunning()) {
+        if (hProc != IntPtr.Zero && caveFling != IntPtr.Zero) {
             long cf = caveFling.ToInt64();
             long sPtr, curSil;
             if (TryFindPlayerBagSilverRecord(out sPtr, out curSil, false) && curSil >= 0) {
                 return curSil;
             }
             long cachedSPtr = ReadI64(cf + OFF_DATA_SILVER_PTR);
+            if (!IsValidGameHeapPtr(cachedSPtr) && IsValidGameHeapPtr(_lastValidSilverPtr)) cachedSPtr = _lastValidSilverPtr;
             if (IsValidGameHeapPtr(cachedSPtr) && TryVerifyRecordItemKey(cachedSPtr, 1)) {
                 long v = ReadI64(cachedSPtr + 0x10);
                 if (v >= 0) {
@@ -3203,13 +3494,14 @@ internal static class LiveMemoryCheatEngine {
         PersistSilverCacheFile(targetGold);
 
         EnsureProcessAttached();
-        if (hProc != IntPtr.Zero && caveFling != IntPtr.Zero && !ExtFlingRunning()) {
+        if (hProc != IntPtr.Zero && caveFling != IntPtr.Zero) {
             long cf = caveFling.ToInt64();
             byte[] goldBytes = BitConverter.GetBytes(targetGold);
             long sPtr, curSil;
             bool resolvedDirect = TryFindPlayerBagSilverRecord(out sPtr, out curSil, false);
             if (!resolvedDirect) {
                 long cachedSPtr = ReadI64(cf + OFF_DATA_SILVER_PTR);
+                if (!IsValidGameHeapPtr(cachedSPtr) && IsValidGameHeapPtr(_lastValidSilverPtr)) cachedSPtr = _lastValidSilverPtr;
                 if (IsValidGameHeapPtr(cachedSPtr) && TryVerifyRecordItemKey(cachedSPtr, 1)) {
                     sPtr = cachedSPtr;
                     curSil = ReadI64(cachedSPtr + 0x10);
@@ -3495,6 +3787,12 @@ internal static class LiveMemoryCheatEngine {
     public static void Detach() {
         _itemKeyByTableIdx.Clear();
         _caveParamCache.Clear();
+        _lastValidPlayerPtr = 0;
+        _lastValidStaPtr = 0;
+        _lastValidSpiPtr = 0;
+        _lastValidInvMgrPtr = 0;
+        _lastValidBagContPtr = 0;
+        _lastValidSilverPtr = 0;
         _arrowSanitizedPid = 0;
         _cachedSilver = -1L;
         _lastSilverQueryUtc = DateTime.MinValue;

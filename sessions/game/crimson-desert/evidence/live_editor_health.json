@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-11-15T15:46:50",
+  "attached_pid": 16800,
+  "cave_addr": "0x13FF00000",
+  "world_loaded": true,
+  "load_status": "인게임 월드 안정화 완료",
+  "active_feature_count": 0,
+  "player_ptr_valid": true,
+  "sta_ptr_valid": true,
+  "spi_ptr_valid": true,
+  "player_ptr": "0x3F0182E0F00",
+  "sta_ptr": "0x3F01833AA40",
+  "spi_ptr": "0x3F01833A9B0",
+  "inv_mgr_ptr": "0x3F018190F00",
+  "bag_cont_ptr": "0x3F018019420",
+  "mount_seen": 259,
+  "fast_jump_poller_active": true,
+  "live_silver": 66800028,
+  "installed_hooks": ["PLAYER", "STATS"],
+  "hit_counters": {"commit": 62, "dur": 0, "crime": 380, "tame": 59, "breath": 353, "slot": 0, "save": 0, "sel": 0, "rom": 0, "cnt": 7, "wanted": 0},
+  "cave_values": {"god": 0, "sta": 0, "cd": 0, "msta": 0, "def": 0, "dmg": 0, "pendGold": 0, "speed": 1, "kissState": 0, "jumpSc": 0, "swim": 1, "freeze": 0, "exp": 1, "thiefDet": 0, "pick": 0, "bounty": 0, "dur": 0, "tameMult": 1, "tameInst": 0, "breathMode": 0, "bag": 0, "craftCost": 0, "craftSucc": 0, "imbue": 0, "spec": 0, "rom": 1, "gear": 0, "glove": 0, "mspd": 1}
+}

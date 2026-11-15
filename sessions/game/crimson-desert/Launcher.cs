@@ -1352,9 +1352,8 @@ class Launcher : Form {
                 LiveMemoryCheatEngine.ExpMult = (float)expMultiplier;
                 LiveMemoryCheatEngine.SyncWithGame(BuildEditorCheatState());
                 if (lblLiveCheatsStatus != null && !lblLiveCheatsStatus.IsDisposed) {
-                    lblLiveCheatsStatus.Text = extFling
-                        ? "[외부 FLiNG 트레이너 실행 중] 내부 훅·Num키 양보 대기 상태"
-                        : "[실시간 메모리 반영] " + LiveMemoryCheatEngine.GetLiveCheatStatusString();
+                    lblLiveCheatsStatus.Text = (extFling ? "[외부 FLiNG 공존 가동] " : "[실시간 메모리 반영] ")
+                        + LiveMemoryCheatEngine.GetLiveCheatStatusString();
                 }
             } catch { }
         };
@@ -2241,26 +2240,12 @@ class Launcher : Form {
                 return;
             }
 
-            if (Running() && !SelfTestMode && existingHwnd == IntPtr.Zero) {
-                if (MessageBox.Show(
-                    this,
-                    "게임 실행 중 외부 FLiNG 트레이너를 열면 내부 18개 메모리 훅을 일시 해제하고 양보합니다.\n계속 실행하시겠습니까?",
-                    "외부 FLiNG 트레이너 실행 확인",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question
-                ) != DialogResult.Yes) {
-                    return;
-                }
-            }
-
-            // Notify SessionBoost & yield Num0..9 / .text hooks ONLY after target availability & confirmation
             LiveMemoryCheatEngine.NotifyExternalFlingLaunched();
-            LiveMemoryCheatEngine.RevertAllHooks();
             SyncFlingHotkeyYield(true);
 
             if (existingHwnd != IntPtr.Zero) {
                 Win32Native.SetForegroundWindow(existingHwnd);
-                Log("⚡ [FLiNG Plus 12 트레이너] 실행 중인 외부 트레이너 창을 전면으로 전환했습니다 (내부 훅/Num키 양보 유지).");
+                Log("⚡ [FLiNG Plus 12 트레이너] 실행 중인 외부 트레이너 창을 전면으로 전환했습니다 (내부 21개 훅 실시간 공존 가동).");
                 return;
             }
 
@@ -2270,7 +2255,7 @@ class Launcher : Form {
                 UseShellExecute = true,
                 Verb = "runas"
             });
-            Log("⚡ [FLiNG Plus 12 트레이너 Updated 2026.10.30] 관리자 권한 실행 + 내부 메모리 훅/Num키 양보 완료!");
+            Log("⚡ [FLiNG Plus 12 트레이너 Updated 2026.10.30] 관리자 권한 실행 + 내부 21개 메모리 훅 실시간 공존 가동 완료!");
         } catch (Exception ex) {
             Log("FLiNG 트레이너 실행 오류: " + ex.Message);
         }
