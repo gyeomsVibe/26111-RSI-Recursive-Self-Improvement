@@ -2153,6 +2153,7 @@ def run_hud_all_tabs_experiment(args):
         "peak_ram_mb": max([s["ram_mb"] for s in gpu_samples] or [0.0]),
         "peak_vram_mb": max([s["vram_mb"] for s in gpu_samples] or [0]),
         "peak_gpu_temp_c": max([s["gpu_temp"] for s in gpu_samples] or [0]),
+        "overall_pass": bool(not aborted and len(failed_buttons) == 0 and total_row_passed == 129 and top_passed == 7),
     }
     report["phase1_stage_a"] = {
         "session_id": session_id,

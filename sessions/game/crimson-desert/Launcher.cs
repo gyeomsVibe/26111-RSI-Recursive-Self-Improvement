@@ -2301,20 +2301,20 @@ class Launcher : Form {
         try {
             if (string.IsNullOrEmpty(xmlPath) || !File.Exists(xmlPath)) return;
             var doc = ConfigStore.Load(xmlPath);
-            var nFov = doc.SelectSingleNode("//*[@Name='_cameraFov']") as XmlElement;
-            if (nFov != null) SelectComboByPrefix(cbFov, nFov.GetAttribute("_cameraFov"));
-            var nZoom = doc.SelectSingleNode("//*[@Name='_zoomInOut']") as XmlElement;
-            if (nZoom != null) SelectComboByPrefix(cbZoom, nZoom.GetAttribute("_zoomInOut"));
-            var nBlur = doc.SelectSingleNode("//*[@Name='_motionBlur']") as XmlElement;
-            if (nBlur != null) SelectComboByPrefix(cbBlur, nBlur.GetAttribute("_blurEffectStrength"));
+            var nFov = doc.SelectSingleNode("//*[@Name='_cameraFovRate']") as XmlElement;
+            if (nFov != null) SelectComboByPrefix(cbFov, nFov.GetAttribute("_value"));
+            var nZoom = doc.SelectSingleNode("//*[@Name='_cameraZoomDistanceRate']") as XmlElement;
+            if (nZoom != null) SelectComboByPrefix(cbZoom, nZoom.GetAttribute("_value"));
+            var nBlur = doc.SelectSingleNode("//*[@Name='_screenBlurScale']") as XmlElement;
+            if (nBlur != null) SelectComboByPrefix(cbBlur, nBlur.GetAttribute("_value"));
             var nUp = doc.SelectSingleNode("//*[@Name='_upscaleResolution']") as XmlElement;
             if (nUp != null) SelectComboByPrefix(cbUpscale, nUp.GetAttribute("_select"));
-            var nTex = doc.SelectSingleNode("//*[@Name='_textureQuality']") as XmlElement;
-            if (nTex != null) SelectComboByPrefix(cbTex, nTex.GetAttribute("_textureQualityLevelSelect"));
-            var nMod = doc.SelectSingleNode("//*[@Name='_modelDetailQuality']") as XmlElement;
-            if (nMod != null) SelectComboByPrefix(cbModel, nMod.GetAttribute("_modelDetailQualityLevelSelect"));
-            var nWat = doc.SelectSingleNode("//*[@Name='_waterQuality']") as XmlElement;
-            if (nWat != null) SelectComboByPrefix(cbWater, nWat.GetAttribute("_waterQualityLevelSelect"));
+            var nTex = doc.SelectSingleNode("//*[@Name='_textureQualityLevelSelect']") as XmlElement;
+            if (nTex != null) SelectComboByPrefix(cbTex, nTex.GetAttribute("_select"));
+            var nMod = doc.SelectSingleNode("//*[@Name='_modelQualityLevelSelect']") as XmlElement;
+            if (nMod != null) SelectComboByPrefix(cbModel, nMod.GetAttribute("_select"));
+            var nWat = doc.SelectSingleNode("//*[@Name='_waterQualityLevelSelect']") as XmlElement;
+            if (nWat != null) SelectComboByPrefix(cbWater, nWat.GetAttribute("_select"));
         } catch { }
     }
 
@@ -4375,7 +4375,15 @@ class Launcher : Form {
                             if (!l5.cbTex.Text.StartsWith("High ", StringComparison.OrdinalIgnoreCase))
                                 throw new Exception("Gate 8 profile " + l5.profiles.SelectedItem + " did not sync cbTex to High: " + l5.cbTex.Text);
                         }
-                        l5.profiles.SelectedIndex = 0;
+                        l5.profiles.SelectedIndex = 1; // 01-초고화질-선명도극대화-탐험.xml (AA + High Model)
+                        if (!l5.cbUpscale.Text.StartsWith("AA ", StringComparison.OrdinalIgnoreCase)
+                            || !l5.cbModel.Text.StartsWith("High ", StringComparison.OrdinalIgnoreCase))
+                            throw new Exception("Gate 8 profile 01 did not sync to AA/High: " + l5.cbUpscale.Text + " / " + l5.cbModel.Text);
+                        l5.profiles.SelectedIndex = 4; // 04-극한프레임-성능우선-장시간안정.xml (59% + Low Model)
+                        if (!l5.cbUpscale.Text.StartsWith("59% ", StringComparison.OrdinalIgnoreCase)
+                            || !l5.cbModel.Text.StartsWith("Low ", StringComparison.OrdinalIgnoreCase))
+                            throw new Exception("Gate 8 profile 04 did not sync to 59%/Low: " + l5.cbUpscale.Text + " / " + l5.cbModel.Text);
+                        l5.profiles.SelectedIndex = 0; // 00-장시간무병목-고화질마스터-GTX1070최적.xml (67% + Medium Model/Water)
                         if (!l5.cbUpscale.Text.StartsWith("67% ", StringComparison.OrdinalIgnoreCase)
                             || !l5.cbModel.Text.StartsWith("Medium ", StringComparison.OrdinalIgnoreCase)
                             || !l5.cbWater.Text.StartsWith("Medium ", StringComparison.OrdinalIgnoreCase))
