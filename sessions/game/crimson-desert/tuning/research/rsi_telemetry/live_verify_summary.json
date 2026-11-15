@@ -1,32 +1,34 @@
 {
-  "session_id": "20261115_154424_u11_verified_20261115",
-  "tag": "u11_verified_20261115",
+  "session_id": "20261115_162543_u13_preset_live_verify",
+  "tag": "u13_preset_live_verify",
   "mode": "hud-all-tabs-experiment",
   "trigger_verified": true,
   "aborted": false,
   "abort_reason": "",
   "aborted_by_human_input": false,
-  "completed_at": "2026-11-15T15:46:58",
+  "completed_at": "2026-11-15T16:28:25",
   "entered_world": true,
   "world_loaded": true,
   "player_ptr_valid": true,
   "sta_ptr_valid": true,
   "spi_ptr_valid": true,
-  "player_ptr": "0x3F0182E0F00",
-  "sta_ptr": "0x3F01833AA40",
-  "spi_ptr": "0x3F01833A9B0",
-  "inv_mgr_ptr": "0x3F018190F00",
-  "bag_cont_ptr": "0x3F018019420",
+  "player_ptr": "0x3D9AE2E0F00",
+  "sta_ptr": "0x3D9AE33AA40",
+  "spi_ptr": "0x3D9AE33A9B0",
+  "inv_mgr_ptr": "0x3D9AE190F00",
+  "bag_cont_ptr": "0x3D9AE019420",
   "fast_jump_poller_active": true,
+  "fast_jump_poll_interval_ms": 20,
+  "fast_jump_poll_ticks": 4549,
   "external_fling_hooks_preserved": 6,
   "gold_live_injected": true,
-  "commit_hits": 62,
+  "commit_hits": 36,
   "hit_counters": {
-    "commit": 62,
+    "commit": 36,
     "dur": 0,
-    "crime": 380,
-    "tame": 59,
-    "breath": 353,
+    "crime": 374,
+    "tame": 40,
+    "breath": 279,
     "slot": 0,
     "save": 0,
     "sel": 0,
@@ -35,11 +37,11 @@
     "wanted": 0
   },
   "hit_counters_delta": {
-    "commit": 62,
+    "commit": 36,
     "dur": 0,
-    "crime": 380,
-    "tame": 59,
-    "breath": 353,
+    "crime": 374,
+    "tame": 40,
+    "breath": 279,
     "slot": 0,
     "save": 0,
     "sel": 0,
@@ -110,7 +112,7 @@
     {
       "cat": "top_bar",
       "row": "clarity_toggle",
-      "label": "▣ 화질:FSR59%",
+      "label": "▣ 화질:FSR67%",
       "passed": true,
       "observed": {
         "xml_protected": true
@@ -1319,35 +1321,35 @@
   "action_probes": [
     {
       "tab_idx": 0,
-      "mean_frame_delta": 14.4,
-      "max_frame_delta": 18.77,
+      "mean_frame_delta": 10.36,
+      "max_frame_delta": 12.36,
       "stuck_recoveries": 0,
-      "start_luma": 74.39,
-      "start_std_luma": 22.84
+      "start_luma": 72.54,
+      "start_std_luma": 17.63
     },
     {
       "tab_idx": 1,
-      "mean_frame_delta": 13.4,
-      "max_frame_delta": 14.93,
+      "mean_frame_delta": 16.54,
+      "max_frame_delta": 19.98,
       "stuck_recoveries": 0,
-      "start_luma": 35.06,
-      "start_std_luma": 19.2
+      "start_luma": 36.87,
+      "start_std_luma": 27.5
     },
     {
       "tab_idx": 2,
-      "mean_frame_delta": 23.21,
-      "max_frame_delta": 42.02,
+      "mean_frame_delta": 23.25,
+      "max_frame_delta": 31.99,
       "stuck_recoveries": 0,
-      "start_luma": 75.98,
-      "start_std_luma": 41.99
+      "start_luma": 94.29,
+      "start_std_luma": 62.3
     },
     {
       "tab_idx": 3,
-      "mean_frame_delta": 27.89,
-      "max_frame_delta": 33.06,
+      "mean_frame_delta": 26.06,
+      "max_frame_delta": 33.57,
       "stuck_recoveries": 0,
-      "start_luma": 92.88,
-      "start_std_luma": 55.13
+      "start_luma": 89.12,
+      "start_std_luma": 61.74
     }
   ],
   "proof_screenshots": [
@@ -1356,25 +1358,71 @@
     "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab3_in_game.png",
     "D:\\Games\\Crimson Desert\\tuning\\research\\rsi_telemetry\\live_hud_proof\\tab4_in_game.png"
   ],
-  "presentmon_csv_path": "D:\\Games\\Crimson Desert\\tuning\\research\\sessions\\20261115-154424-u11_verified_20261115-frames.csv",
+  "presentmon_csv_path": "D:\\Games\\Crimson Desert\\tuning\\research\\sessions\\20261115-162543-u13_preset_live_verify-frames.csv",
   "presentmon_summary": {
-    "total_frames": 2628,
-    "mean_present_fps": 38.9,
-    "mean_present_ms": 25.71,
-    "p95_present_ms": 32.31,
-    "p99_present_ms": 35.52,
-    "slowest_1pct_fps": 16.4,
-    "stutter_33ms_pct": 3.234,
-    "mean_gpu_busy_ms": 25.52,
-    "mean_cpu_busy_ms": 9.06,
-    "mean_render_present_lat_ms": 28.75,
+    "total_frames": 2251,
+    "mean_present_fps": 31.89,
+    "mean_present_ms": 31.36,
+    "p95_present_ms": 39.09,
+    "p99_present_ms": 45.39,
+    "slowest_1pct_fps": 12.13,
+    "stutter_33ms_pct": 30.609,
+    "mean_gpu_busy_ms": 31.14,
+    "mean_cpu_busy_ms": 10.38,
+    "mean_render_present_lat_ms": 34.99,
     "present_modes": {
-      "Composed: Flip": 2628,
-      "Composed:": 1
+      "Composed: Flip": 2251
     },
-    "csv_file": "20261115-154424-u11_verified_20261115-frames.csv"
+    "csv_file": "20261115-162543-u13_preset_live_verify-frames.csv"
   },
-  "peak_ram_mb": 5206.4,
-  "peak_vram_mb": 4265,
-  "peak_gpu_temp_c": 55
+  "peak_ram_mb": 5209.6,
+  "peak_vram_mb": 4374,
+  "peak_gpu_temp_c": 56,
+  "phase1_stage_a": {
+    "session_id": "20261115_162543_u13_preset_live_verify",
+    "completed_at": "2026-11-15T16:28:25",
+    "entered_world": true,
+    "world_loaded": true,
+    "player_ptr_valid": true,
+    "sta_ptr_valid": true,
+    "spi_ptr_valid": true,
+    "player_ptr": "0x3D9AE2E0F00",
+    "sta_ptr": "0x3D9AE33AA40",
+    "spi_ptr": "0x3D9AE33A9B0",
+    "inv_mgr_ptr": "0x3D9AE190F00",
+    "bag_cont_ptr": "0x3D9AE019420",
+    "fast_jump_poller_active": true,
+    "fast_jump_poll_interval_ms": 20,
+    "fast_jump_poll_ticks": 4549,
+    "external_fling_hooks_preserved": 6,
+    "gold_live_injected": true,
+    "commit_hits": 36,
+    "hit_counters_delta": {
+      "commit": 36,
+      "dur": 0,
+      "crime": 374,
+      "tame": 40,
+      "breath": 279,
+      "slot": 0,
+      "save": 0,
+      "sel": 0,
+      "rom": 0,
+      "cnt": 7,
+      "wanted": 0
+    },
+    "live_silver_final": 66800028,
+    "top_bar_buttons_tested": 7,
+    "top_bar_buttons_passed": 7,
+    "tab_headers_tested": 4,
+    "tab_headers_passed": 4,
+    "total_row_buttons_tested": 129,
+    "total_row_buttons_passed": 129,
+    "failed_buttons": [],
+    "xml_preserved": true,
+    "save_guard_restored_ok": true,
+    "forbidden_files_sha256": {
+      "EditorEvidence.py": "1CF5AC586662CD850BC54B2A55DC3A24C6FC64FAAA8504F654E3D84C9E1751F2",
+      "CdRecorder.cs": "319B827FEAAE1C30A798A0E1EA06FEA92800F261CFC731817C78706AFA240CA8"
+    }
+  }
 }

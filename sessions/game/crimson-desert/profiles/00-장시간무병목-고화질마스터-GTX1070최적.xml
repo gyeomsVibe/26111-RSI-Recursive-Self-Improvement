@@ -20,9 +20,9 @@
       <EnumSelectResolutionScale Name="_upscaleResolution" _select="67%" />
     </EngineOptionResolution>
     <EngineOptionGraphics Name="_graphicsOption" Template="/OS_M_Windows::Medium.engineoptiongraphics">
-      <EnumSelectQualityLevel Name="_modelQualityLevelSelect" _select="High" />
+      <EnumSelectQualityLevel Name="_modelQualityLevelSelect" _select="Medium" />
       <EnumSelectQualityLevel Name="_textureQualityLevelSelect" _select="High" />
-      <EnumSelectQualityLevel Name="_waterQualityLevelSelect" _select="High" />
+      <EnumSelectQualityLevel Name="_waterQualityLevelSelect" _select="Medium" />
     </EngineOptionGraphics>
   </EngineOption>
   <EngineOptionSaveVersion Name="_version" _minor="1" _patch="1" />

@@ -258,6 +258,11 @@ internal static class LiveMemoryCheatEngine {
     static string _cachedWorldStatus = "";
     static long _cachedWorkingSet64 = 0;
     static DateTime _cachedStartTimeUtc = DateTime.MinValue;
+    static readonly object _syncLock = new object();
+    static long _fastJumpPollTicks = 0L;
+    static DateTime _lastHealthReadbackUtc = DateTime.MinValue;
+    static int _lastHealthActiveCount = -1;
+    static long _lastHealthSilver = -1L;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
@@ -1310,6 +1315,7 @@ internal static class LiveMemoryCheatEngine {
         if (_fastJumpPollTimer != null) return;
         _fastJumpPollTimer = new System.Threading.Timer(delegate {
             try {
+                System.Threading.Interlocked.Increment(ref _fastJumpPollTicks);
                 if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero || attachedPid == 0) return;
                 EditorCheatState st = _lastSyncedState;
                 if (st == null || st.JumpMultiplier <= 1.05f || st.SpecialConvenienceMode == 3) return;
@@ -1334,6 +1340,7 @@ internal static class LiveMemoryCheatEngine {
     }
 
     static string SyncWithGameCore(EditorCheatState st) {
+        lock (_syncLock) {
         try {
             EnsureFastJumpPollerRunning();
             bool extFlingActive = ExtFlingRunning();
@@ -1640,10 +1647,16 @@ internal static class LiveMemoryCheatEngine {
             }
 
             int activeCount = GetActiveFeatureCount(st);
-            int selId; long selCnt;
-            GetSelectedItemInfo(out selId, out selCnt);
+            int selId = 0; long selCnt = 0;
             long liveSilver = GetLiveSilverAmount();
-            WriteLiveEditorHealth(cf, activeCount, earlyLoadMsg, liveSilver);
+            DateTime nowUtc = DateTime.UtcNow;
+            if ((nowUtc - _lastHealthReadbackUtc).TotalMilliseconds >= 150.0 || activeCount != _lastHealthActiveCount || liveSilver != _lastHealthSilver) {
+                _lastHealthReadbackUtc = nowUtc;
+                _lastHealthActiveCount = activeCount;
+                _lastHealthSilver = liveSilver;
+                GetSelectedItemInfo(out selId, out selCnt);
+                WriteLiveEditorHealth(cf, activeCount, earlyLoadMsg, liveSilver);
+            }
             string silverStr = (liveSilver > 100) ? string.Format("은화 {0:N2}G", liveSilver / 100.0) : (selId > 0 ? string.Format("아이템[ID:{0}] {1:N0}", selId, selCnt) : "인게임 연결됨");
 
             if (activeCount == 0) {
@@ -1653,6 +1666,7 @@ internal static class LiveMemoryCheatEngine {
         } catch (Exception ex) {
             EngLog("EXC in SyncWithGameCore: " + ex);
             return "메모리 동기화 대기";
+        }
         }
     }
 
@@ -1830,6 +1844,8 @@ internal static class LiveMemoryCheatEngine {
                 "  \"bag_cont_ptr\": \"0x{26:X}\",\r\n" +
                 "  \"mount_seen\": {27},\r\n" +
                 "  \"fast_jump_poller_active\": {28},\r\n" +
+                "  \"fast_jump_poll_interval_ms\": 20,\r\n" +
+                "  \"fast_jump_poll_ticks\": {29},\r\n" +
                 "  \"live_silver\": {8},\r\n" +
                 "  \"installed_hooks\": [{9}],\r\n" +
                 "  \"hit_counters\": {{\"commit\": {10}, \"dur\": {11}, \"crime\": {12}, \"tame\": {13}, \"breath\": {14}, \"slot\": {15}, \"save\": {16}, \"sel\": {17}, \"rom\": {18}, \"cnt\": {19}, \"wanted\": {20}}},\r\n" +
@@ -1848,7 +1864,8 @@ internal static class LiveMemoryCheatEngine {
                 hCommit, hDur, hCrime, hTame, hBreath, hSlot, hSave, hSel, hRom, hCnt, hWanted,
                 caveValuesJson,
                 playerPtr, staPtr, spiPtr, invMgrPtr, bagContPtr, hMountSeen,
-                (_fastJumpPollTimer != null) ? "true" : "false"
+                (_fastJumpPollTimer != null) ? "true" : "false",
+                System.Threading.Interlocked.Read(ref _fastJumpPollTicks)
             );
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);

@@ -1,0 +1,29 @@
+<EngineOptionSave ReflectObjectXMLDataVersion="9" _selectPreset="Custom">
+  <EngineOption Name="_option" Template="/OS_M_Windows::Default.engineoption" _check__videoOption="True" _check__resolutionOption="True" _check__graphicsOption="True" _check__controlsOption="True" _check__audioOption="True" _check__languageOption="True">
+    <EngineOptionControls Name="_controlsOption">
+      <EnumSelectLockOnRotateOptionType Name="_lockOnRotateOptionType" _select="Manual" />
+    </EngineOptionControls>
+    <EngineOptionLanguage Name="_languageOption">
+      <OptionStringVector Name="_textLanguage" _value="KOR" />
+      <OptionStringVector Name="_voiceLanguage" _value="KOR" />
+      <EnumSelectGameDifficultyOption Name="_gameDifficultyOption" _select="Easy" />
+    </EngineOptionLanguage>
+    <EngineOptionVideo Name="_videoOption">
+      <OptionInt Name="_cameraShakeScale" _value="0" />
+      <OptionFloat Name="_cameraFovRate" _value="1.250000" />
+      <OptionFloat Name="_cameraZoomDistanceRate" _value="1.180000" />
+      <OptionBool Name="_isLinkZoomDistanceRateWithFov" _value="False" />
+      <OptionInt Name="_screenBlurScale" _value="0" />
+    </EngineOptionVideo>
+    <EngineOptionResolution Name="_resolutionOption">
+      <OptionStringVector Name="_upscaleModeSelect" _value="AMD FSR Upscaling 3.1" />
+      <EnumSelectResolutionScale Name="_upscaleResolution" _select="67%" />
+    </EngineOptionResolution>
+    <EngineOptionGraphics Name="_graphicsOption" Template="/OS_M_Windows::Medium.engineoptiongraphics">
+      <EnumSelectQualityLevel Name="_modelQualityLevelSelect" _select="High" />
+      <EnumSelectQualityLevel Name="_textureQualityLevelSelect" _select="High" />
+      <EnumSelectQualityLevel Name="_waterQualityLevelSelect" _select="Medium" />
+    </EngineOptionGraphics>
+  </EngineOption>
+  <EngineOptionSaveVersion Name="_version" _minor="1" _patch="1" />
+</EngineOptionSave>

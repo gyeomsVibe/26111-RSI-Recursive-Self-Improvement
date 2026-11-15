@@ -102,13 +102,13 @@ ARMS = {
     },
     "FSR67_CombatLock": {
         "arm_id": "FSR67_CombatLock",
-        "label": "FSR 3.1 Quality(67%) 전투 프레임 락 (High 모델 / Med 텍스처·물)",
+        "label": "FSR 3.1 Quality(67%) GTX1070 고화질·무병목 마스터 (High 텍스처 / Med 모델·물)",
         "scale_display": "67%",
-        "texture": "Medium",
-        "model": "High",
+        "texture": "High",
+        "model": "Medium",
         "water": "Medium",
-        "clarity_bonus": 8.5,
-        "vram_est_mb": 3950,
+        "clarity_bonus": 10.2,
+        "vram_est_mb": 4250,
     },
     "FSR59_UltraResponsive": {
         "arm_id": "FSR59_UltraResponsive",
@@ -910,6 +910,9 @@ def validate_xml_strict(xml_path):
     gfx_el = root.find(".//EngineOptionGraphics")
     if gfx_el is None:
         raise ValueError("Missing EngineOptionGraphics")
+    tpl_val = gfx_el.attrib.get("Template", "")
+    if tpl_val != "/OS_M_Windows::Medium.engineoptiongraphics":
+        raise ValueError(f"Graphics template must be Medium.engineoptiongraphics for high-quality lighting/AO, got '{tpl_val}'")
     children = list(gfx_el)
     if len(children) != 3:
         raise ValueError(f"BlackSpace CTD risk: EngineOptionGraphics must have exactly 3 child nodes, got {len(children)}")
@@ -943,7 +946,7 @@ def update_xml_preset(xml_path, params):
         f'<EnumSelectResolutionScale Name="_upscaleResolution" _select="{scale}" />',
         content,
     )
-    target_tpl = "Low" if params.get("model") == "Low" else "Medium"
+    target_tpl = "Medium"
     content = re.sub(
         r'Template="/OS_M_Windows::(?:Low|Medium|High)\.engineoptiongraphics"',
         f'Template="/OS_M_Windows::{target_tpl}.engineoptiongraphics"',
@@ -1325,6 +1328,29 @@ def reset_to_high_quality():
     return True
 
 
+def lock_master_preset():
+    """Locks 00-장시간무병목-고화질마스터-GTX1070최적.xml (FSR 67% Quality + High Tex + Med Model/Water) into MASTER_PROFILE, LIVE_CONFIG, and rsi_state.json."""
+    with _RsiMutex():
+        state = load_state()
+        params = build_arm_params("FSR67_CombatLock", state.get("active_parameters"))
+        params["scale_display"] = "67%"
+        params["texture"] = "High"
+        params["model"] = "Medium"
+        params["water"] = "Medium"
+        params["fov"] = "1.250000"
+        params["zoom"] = "1.180000"
+        update_xml_preset(MASTER_PROFILE, params)
+        if os.path.exists(LIVE_CONFIG) and not is_game_running():
+            update_xml_preset(LIVE_CONFIG, params)
+        state["active_arm"] = "FSR67_CombatLock"
+        state["active_parameters"] = params
+        state["pending_apply_on_exit"] = False
+        save_state(state)
+        export_unified_game_rsi_snapshot(state)
+        print("[RSI v4.1] 메인 마스터 프리셋(00-장시간무병목-고화질마스터-GTX1070최적.xml: FSR 67% Quality + High Tex + Med Model/Water) 고정 완료.")
+        return True
+
+
 def rollback_generation():
     with _RsiMutex():
         state = load_state()
@@ -1524,6 +1550,8 @@ def run_self_test():
     d5 = evolve_parameters(st5, m5)
     assert d5["bottleneck"] == "GPU_SHADER_BOUND", f"Expected GPU_SHADER_BOUND, got {d5['bottleneck']}"
     assert d5["next_arm"] == "FSR67_CombatLock", f"Expected FSR67_CombatLock, got {d5['next_arm']}"
+    for pxml in sorted(glob.glob(os.path.join(PROFILES_DIR, "*.xml"))):
+        assert validate_xml_strict(pxml) is True, f"Profile XML failed strict validation: {pxml}"
     run_self_test_tail_and_parallel()
 
     print("[RSI-SELF-TEST PASS]")
@@ -1618,6 +1646,8 @@ if __name__ == "__main__":
         rollback_generation()
     elif cmd in ("--reset-hq", "--reset"):
         reset_to_high_quality()
+    elif cmd in ("--lock-master",):
+        lock_master_preset()
     elif cmd == "--self-test":
         sys.exit(run_self_test())
     elif cmd == "--self-test-mutex-worker" and len(sys.argv) >= 3:

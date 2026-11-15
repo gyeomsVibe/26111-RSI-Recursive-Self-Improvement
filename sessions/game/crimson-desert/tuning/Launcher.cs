@@ -1188,7 +1188,7 @@ class Launcher : Form {
     internal int specialConvenienceMode = 2; // 0: OFF, 1: 즉시수면, 2: 낙하0면제, 3: 자유비행ON
     internal int gearHiderMode = 1; // 0: 전체표시, 1: 투구숨김(기본 ON), 2: 망토숨김, 3: 투구+망토+납도무기 숨김
     internal int weaponImbueMode = 0; // 0: 없음, 1: 화염폭발, 2: 빙결제압, 3: 뇌전연쇄, 4: 흡혈+치명, 5: 전속성마스터
-    internal bool isNativeAaClarity = true; // true: 100% 네이티브 1080p AA 고선명 모드 (칼같은 선명도·화질 극대화), false: 67% FSR Quality
+    internal bool isNativeAaClarity = false; // false: 67% FSR Quality (GTX 1070 메인 최적 마스터), true: 100% 네이티브 1080p AA 고선명 모드
     internal string activeFsrScaleLabel = "67%";
     internal bool freezeDaytime = false;
     internal string activeImbue = "없음";
@@ -1844,14 +1844,19 @@ class Launcher : Form {
 
         profiles.SelectedIndexChanged += delegate {
             if (profiles.SelectedItem == null) return;
-            string info = Path.Combine(ProfileDir, profiles.SelectedItem.ToString() + ".txt");
+            string selXml = Path.Combine(ProfileDir, profiles.SelectedItem.ToString());
+            string info = selXml + ".txt";
             profileInfo.Text = File.Exists(info) && new FileInfo(info).Length <= 4096 ? File.ReadAllText(info, Encoding.UTF8) : "프리셋 설명 정보가 없습니다.";
+            SyncTuningCombosFromXml(selXml);
         };
 
         Button btnApplyPreset = MakeButton("✅ 선택한 프리셋 즉시 적용", 244, 38, ACCENT_GREEN, Color.Black, delegate {
             Guard();
             if (profiles.SelectedItem == null) throw new InvalidOperationException("적용할 프로필을 선택해 주세요.");
-            ConfigStore.RestoreGraphics(Path.Combine(ProfileDir, profiles.SelectedItem.ToString()), config, BackupDir);
+            string selXml = Path.Combine(ProfileDir, profiles.SelectedItem.ToString());
+            ConfigStore.RestoreGraphics(selXml, config, BackupDir);
+            SyncClarityFromConfigXml();
+            SyncTuningCombosFromXml(selXml);
             Log("프리셋 적용 완료: " + profiles.SelectedItem.ToString() + " (언어·조작·난이도 보존)");
         });
         btnApplyPreset.Location = new Point(14, y);
@@ -1951,7 +1956,7 @@ class Launcher : Form {
             Height = 22,
             Location = new Point(14, y),
             ForeColor = ACCENT_GOLD,
-            Font = new Font("Malgun Gothic", 8.6f, FontStyle.Bold)
+            Font = new Font("Malgun Gothic", 8.2f, FontStyle.Bold)
         };
         leftCard.Controls.Add(lblRsiStatus);
         y += 26;
@@ -1995,6 +2000,7 @@ class Launcher : Form {
             string model = cbModel.Text.Split(' ')[0];
             string water = cbWater.Text.Split(' ')[0];
             ConfigStore.ApplyCustomGraphics(config, BackupDir, fov, zoom, blur, blur, scale, tex, model, water);
+            SyncClarityFromConfigXml();
             Log(string.Format("커스텀 그래픽 반영 완료: FOV={0}, Zoom={1}, FSR={2}, Texture={3}, Model={4}", fov, zoom, scale, tex, model));
             MessageBox.Show(this, "커스텀 그래픽 및 시야 설정이 엔진 설정 파일에 즉시 반영되었습니다!\n(기존 설정은 backups 폴더에 자동 백업됨)", "적용 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
@@ -2266,6 +2272,52 @@ class Launcher : Form {
         SetGearHiderMode(nextMode);
     }
 
+    static void SelectComboByPrefix(ComboBox cb, string prefix) {
+        if (cb == null || string.IsNullOrEmpty(prefix)) return;
+        for (int i = 0; i < cb.Items.Count; i++) {
+            string item = cb.Items[i].ToString();
+            if (item.StartsWith(prefix + " ", StringComparison.OrdinalIgnoreCase) || string.Equals(item, prefix, StringComparison.OrdinalIgnoreCase)) {
+                cb.SelectedIndex = i;
+                return;
+            }
+        }
+        double targetVal;
+        if (double.TryParse(prefix, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out targetVal)) {
+            int bestIdx = -1;
+            double bestDiff = double.MaxValue;
+            for (int i = 0; i < cb.Items.Count; i++) {
+                string tok = cb.Items[i].ToString().Split(' ')[0];
+                double v;
+                if (double.TryParse(tok, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v)) {
+                    double d = Math.Abs(v - targetVal);
+                    if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+                }
+            }
+            if (bestIdx >= 0) cb.SelectedIndex = bestIdx;
+        }
+    }
+
+    internal void SyncTuningCombosFromXml(string xmlPath) {
+        try {
+            if (string.IsNullOrEmpty(xmlPath) || !File.Exists(xmlPath)) return;
+            var doc = ConfigStore.Load(xmlPath);
+            var nFov = doc.SelectSingleNode("//*[@Name='_cameraFov']") as XmlElement;
+            if (nFov != null) SelectComboByPrefix(cbFov, nFov.GetAttribute("_cameraFov"));
+            var nZoom = doc.SelectSingleNode("//*[@Name='_zoomInOut']") as XmlElement;
+            if (nZoom != null) SelectComboByPrefix(cbZoom, nZoom.GetAttribute("_zoomInOut"));
+            var nBlur = doc.SelectSingleNode("//*[@Name='_motionBlur']") as XmlElement;
+            if (nBlur != null) SelectComboByPrefix(cbBlur, nBlur.GetAttribute("_blurEffectStrength"));
+            var nUp = doc.SelectSingleNode("//*[@Name='_upscaleResolution']") as XmlElement;
+            if (nUp != null) SelectComboByPrefix(cbUpscale, nUp.GetAttribute("_select"));
+            var nTex = doc.SelectSingleNode("//*[@Name='_textureQuality']") as XmlElement;
+            if (nTex != null) SelectComboByPrefix(cbTex, nTex.GetAttribute("_textureQualityLevelSelect"));
+            var nMod = doc.SelectSingleNode("//*[@Name='_modelDetailQuality']") as XmlElement;
+            if (nMod != null) SelectComboByPrefix(cbModel, nMod.GetAttribute("_modelDetailQualityLevelSelect"));
+            var nWat = doc.SelectSingleNode("//*[@Name='_waterQuality']") as XmlElement;
+            if (nWat != null) SelectComboByPrefix(cbWater, nWat.GetAttribute("_waterQualityLevelSelect"));
+        } catch { }
+    }
+
     void SyncClarityFromConfigXml() {
         try {
             if (!File.Exists(config)) return;
@@ -2279,6 +2331,7 @@ class Launcher : Form {
                     UpdateTopMasterBar();
                 }
             }
+            SyncTuningCombosFromXml(config);
         } catch { }
     }
 
@@ -2288,16 +2341,18 @@ class Launcher : Form {
             return;
         }
         isNativeAaClarity = !isNativeAaClarity;
+        if (!isNativeAaClarity) activeFsrScaleLabel = "67%";
         UpdateTopMasterBar();
         try {
             string scale = isNativeAaClarity ? "AA" : "67%";
-            string tex = isNativeAaClarity ? "Medium" : "High";
-            string model = "High";
-            string water = "High";
+            string tex = "High";
+            string model = isNativeAaClarity ? "High" : "Medium";
+            string water = "Medium";
             if (File.Exists(config)) {
                 ConfigStore.ApplyCustomGraphics(config, BackupDir, "1.250000", "1.180000", "0", "0", scale, tex, model, water);
+                SyncTuningCombosFromXml(config);
             }
-            Log(isNativeAaClarity ? "▣ [100% 네이티브 AA 모드] 해상도를 100% AA로 변경했습니다. (주의: GTX 1070에서 활공/밀집 지형 시 GPU 과부하 가능성이 있으므로 67% FSR 모드를 권장합니다)" : "▣ [GTX 1070 튕김방지 모드 ON] FSR 67% Quality + 텍스처 High + 모델/물 High 조합으로 고화질·고프레임을 동시 달성했습니다!");
+            Log(isNativeAaClarity ? "▣ [100% 네이티브 AA 모드] 해상도를 100% AA + 텍스처 High로 변경했습니다. (주의: GTX 1070에서 활공/밀집 지형 시 67% FSR 모드를 권장합니다)" : "▣ [GTX 1070 튕김방지 모드 ON] FSR 67% Quality + 텍스처 High + 모델/물 Medium 조합으로 고화질·고프레임을 동시 달성했습니다!");
         } catch { }
     }
 
@@ -3727,7 +3782,12 @@ class Launcher : Form {
         if (Directory.Exists(ProfileDir)) {
             var files = Directory.GetFiles(ProfileDir, "*.xml");
             Array.Sort(files);
-            foreach (var f in files) profiles.Items.Add(Path.GetFileName(f));
+            bool hasCanonical01 = File.Exists(Path.Combine(ProfileDir, "01-초고화질-선명도극대화-탐험.xml"));
+            foreach (var f in files) {
+                string fn = Path.GetFileName(f);
+                if (hasCanonical01 && string.Equals(fn, "01-초고화질-극대화-탐험.xml", StringComparison.OrdinalIgnoreCase)) continue;
+                profiles.Items.Add(fn);
+            }
         }
         if (profiles.Items.Count > 0) profiles.SelectedIndex = 0;
     }
@@ -3772,18 +3832,20 @@ class Launcher : Form {
                 }
                 _lastRsiStateMtime = mtime;
                 string json = File.ReadAllText(stateFile, Encoding.UTF8);
+                int activeParamsIdx = json.IndexOf("\"active_parameters\"", StringComparison.Ordinal);
+                string activeBlock = activeParamsIdx >= 0 ? json.Substring(activeParamsIdx) : json;
                 var genMatch = System.Text.RegularExpressions.Regex.Match(json, "\"current_generation\"\\s*:\\s*(\\d+)");
                 var armMatch = System.Text.RegularExpressions.Regex.Match(json, "\"active_arm\"\\s*:\\s*\"([^\"]+)\"");
-                var scaleMatch = System.Text.RegularExpressions.Regex.Match(json, "\"scale_display\"\\s*:\\s*\"([^\"]+)\"");
-                var texMatch = System.Text.RegularExpressions.Regex.Match(json, "\"texture\"\\s*:\\s*\"([^\"]+)\"");
+                var scaleMatch = System.Text.RegularExpressions.Regex.Match(activeBlock, "\"scale_display\"\\s*:\\s*\"([^\"]+)\"");
+                var texMatch = System.Text.RegularExpressions.Regex.Match(activeBlock, "\"texture\"\\s*:\\s*\"([^\"]+)\"");
                 var rewardMatch = System.Text.RegularExpressions.Regex.Match(json, "\"last_reward_score\"\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)");
                 var fpsMatch = System.Text.RegularExpressions.Regex.Match(json, "\"last_measured_fps\"\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)");
                 if (genMatch.Success && scaleMatch.Success) {
                     string armTxt = armMatch.Success ? armMatch.Groups[1].Value : ("FSR " + scaleMatch.Groups[1].Value);
-                    string texTxt = texMatch.Success ? texMatch.Groups[1].Value : "Medium";
+                    string texTxt = texMatch.Success ? texMatch.Groups[1].Value : "High";
                     string tail = (fpsMatch.Success && rewardMatch.Success)
-                        ? string.Format("실측 {0} FPS · 보상 {1}점", fpsMatch.Groups[1].Value, rewardMatch.Groups[1].Value)
-                        : "자율 밴딧 최적화 가동";
+                        ? string.Format("{0} FPS · 보상 {1}점", fpsMatch.Groups[1].Value, rewardMatch.Groups[1].Value)
+                        : "자율 밴딧 가동";
                     _cachedRsiLabel = string.Format("RSI Gen #{0} | {1} ({2}/Tex:{3}) | {4}",
                         genMatch.Groups[1].Value, armTxt, scaleMatch.Groups[1].Value, texTxt, tail);
                     _cachedRsiColor = ACCENT_GREEN;
@@ -4304,6 +4366,23 @@ class Launcher : Form {
                         hud5.SetInteractiveMode(false);
                         if (totalRowBtns != 129)
                             throw new Exception("Gate 6 total row button count mismatch: " + totalRowBtns);
+
+                        // Gate 8: Canonical 6 presets (00..05), Combobox sync, and RSI active_parameters parsing
+                        if (l5.profiles.Items.Count != 6)
+                            throw new Exception("Gate 8 expected 6 canonical profiles, got " + l5.profiles.Items.Count);
+                        for (int pi = 0; pi < l5.profiles.Items.Count; pi++) {
+                            l5.profiles.SelectedIndex = pi;
+                            if (!l5.cbTex.Text.StartsWith("High ", StringComparison.OrdinalIgnoreCase))
+                                throw new Exception("Gate 8 profile " + l5.profiles.SelectedItem + " did not sync cbTex to High: " + l5.cbTex.Text);
+                        }
+                        l5.profiles.SelectedIndex = 0;
+                        if (!l5.cbUpscale.Text.StartsWith("67% ", StringComparison.OrdinalIgnoreCase)
+                            || !l5.cbModel.Text.StartsWith("Medium ", StringComparison.OrdinalIgnoreCase)
+                            || !l5.cbWater.Text.StartsWith("Medium ", StringComparison.OrdinalIgnoreCase))
+                            throw new Exception("Gate 8 master profile 00 did not sync to 67%/High/Medium/Medium");
+                        l5.UpdateRsiStatus();
+                        if (!l5.lblRsiStatus.Text.Contains("Tex:High"))
+                            throw new Exception("Gate 8 UpdateRsiStatus did not parse active_parameters Tex:High: " + l5.lblRsiStatus.Text);
                     }
                 } finally {
                     Launcher.SelfTestMode = false;
@@ -4315,7 +4394,7 @@ class Launcher : Form {
                 if (silCheck >= 5000000000L)
                     throw new Exception("Gate 7 bogus silver cache detected: " + silCheck);
 
-                Console.WriteLine("[SELF-TEST PASS] Gates 1..7 OK (" + sigReport + " + Silver/Arrow Guard + Trigger Gate + 129 HUD Hitmap Buttons + Non-Activating HUD Verified)");
+                Console.WriteLine("[SELF-TEST PASS] Gates 1..8 OK (" + sigReport + " + 6 Master Presets + RSI ActiveParams + Silver/Arrow Guard + Trigger Gate + 129 HUD Hitmap Buttons)");
                 return 0;
             } catch (Exception ex) { Console.Error.WriteLine("[SELF-TEST FAIL] " + ex); return 1; } finally {
                 string full = Path.GetFullPath(dir);
