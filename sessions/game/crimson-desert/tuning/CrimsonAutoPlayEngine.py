@@ -314,11 +314,18 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
     ]
 
 
-def _is_physical_key_override(wparam, flags):
+def _is_physical_key_override(wparam, flags, vk_code=0):
     # Only non-injected keydowns (LLKHF_INJECTED == 0x10 bit clear) indicate real human input.
+    # Ignore Windows keys (VK_LWIN=0x5B, VK_RWIN=0x5C) and Alt-Tab (VK_TAB=0x09, VK_MENU/LMENU/RMENU=0x12/0xA4/0xA5)
+    # when the user switches windows outside the game; F12 (0x7B), Pause (0x13), and ESC (0x1B) always abort immediately.
     if wparam not in (0x0100, 0x0104):
         return False
-    return (int(flags) & 0x10) == 0
+    if (int(flags) & 0x10) != 0:
+        return False
+    vk = int(vk_code) & 0xFF
+    if vk in (0x5B, 0x5C, 0x09, 0x12, 0xA4, 0xA5):
+        return False
+    return True
 
 
 class HardwareInputGuard:
@@ -363,7 +370,7 @@ class HardwareInputGuard:
             global EMERGENCY_STOP_TRIGGERED
             if nCode >= 0 and lParam:
                 kb = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                if _is_physical_key_override(wParam, kb.flags):
+                if _is_physical_key_override(wParam, kb.flags, kb.vkCode):
                     EMERGENCY_STOP_TRIGGERED = True
                     _AUTH_STATE["aborted_by_human_input"] = True
                     _AUTH_STATE["human_abort_vk"] = int(kb.vkCode)
@@ -1134,6 +1141,7 @@ def run_auto_play(args):
     log_event("START_AUTO_PLAY_ENGINE", f"Starting Live Gameplay Telemetry Collection ({args.duration_min} min, tag={args.tag})", {"session_id": session_id, "target_duration_sec": target_duration_sec})
 
     pre_save_hashes = snapshot_user_saves(guard_dir)
+    pre_ini_snap = snapshot_ini_config()
     log_event("SAVE_GUARD_SNAPSHOT", f"Protected {len(pre_save_hashes)} save files in {guard_dir}")
 
     pm_proc = None
@@ -1241,9 +1249,18 @@ def run_auto_play(args):
             peak_vram_mb = max(peak_vram_mb, stats["vram_mb"])
             peak_gpu_temp = max(peak_gpu_temp, stats["gpu_temp"])
 
-            if cycle_idx < len(EDITOR_TEST_MATRIX):
+            matrix_len = len(EDITOR_TEST_MATRIX)
+            if cycle_idx < matrix_len:
                 step_name, ini_overrides, hotkey_id = EDITOR_TEST_MATRIX[cycle_idx]
                 write_ini_config(ini_overrides)
+            elif cycle_idx % 20 == 0:
+                rot_idx = ((cycle_idx // 20) % (matrix_len - 2)) + 1
+                step_name, ini_overrides, _ = EDITOR_TEST_MATRIX[rot_idx]
+                hotkey_id = None
+                write_ini_config(ini_overrides)
+            elif cycle_idx % 20 == 3:
+                step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play", {}, None)
+                write_ini_config({})
             else:
                 step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play", {}, None)
             if hotkey_id is not None:
@@ -1344,7 +1361,7 @@ def run_auto_play(args):
             time.sleep(1.4)
     finally:
         release_all_keys()
-        write_ini_config({})
+        restore_ini_config_safe_speeds(pre_ini_snap)
         time.sleep(1.5)
 
         if pm_proc is not None and pm_proc.poll() is None:
