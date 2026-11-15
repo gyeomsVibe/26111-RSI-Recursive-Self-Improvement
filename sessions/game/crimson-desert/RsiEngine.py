@@ -503,13 +503,15 @@ def _detect_recent_crash(frame_mtimes):
     return False, ""
 
 
-def analyze_unprocessed_sessions(state, sessions_dir=SESSIONS_DIR, rsi_dir=RSI_DIR, limit_frames=1):
+def analyze_unprocessed_sessions(state, sessions_dir=SESSIONS_DIR, rsi_dir=RSI_DIR, limit_frames=1, autoplay_dir=None):
+    if autoplay_dir is None:
+        autoplay_dir = AUTOPLAY_DIR if os.path.normcase(os.path.abspath(sessions_dir)) == os.path.normcase(os.path.abspath(SESSIONS_DIR)) else os.path.join(sessions_dir, "autoplay_sessions")
     processed = set(state.get("processed_csvs", []))
     all_frame_csvs = sorted(glob.glob(os.path.join(sessions_dir, "*-frames.csv")))
     all_gpu_csvs = (
         sorted(glob.glob(os.path.join(sessions_dir, "*-gpu.csv")))
         + sorted(glob.glob(os.path.join(sessions_dir, "*-watcher.csv")))
-        + sorted(glob.glob(os.path.join(AUTOPLAY_DIR, "*", "gpu_samples.csv")))
+        + sorted(glob.glob(os.path.join(autoplay_dir, "*", "gpu_samples.csv")))
         + sorted(glob.glob(os.path.join(rsi_dir, "session_*.csv")))
     )
 

@@ -486,6 +486,14 @@ internal static class LiveMemoryCheatEngine {
     static long _lastValidInvMgrPtr = 0;
     static long _lastValidBagContPtr = 0;
     static long _lastValidSilverPtr = 0;
+    // U15: bound the silver sync so a single-container match cannot re-arm pendGold forever.
+    static long _silverLastAppliedTarget = 0L;
+    static long _silverLastPendGold = 0L;
+    static int _silverRetryCount = 0;
+    // 8 attempts at the ~250ms sync cadence = a ~2s budget: long enough for a late-rebuilt
+    // authoritative container to show up, short enough that the write rate never resembles
+    // the sustained tamper loop that killed the process in U15 round 1.
+    const int SILVER_MAX_RETRY = 8;
     static System.Threading.Timer _fastJumpPollTimer = null;
 
     // External FLiNG Memory Control Addresses (0x211D0000 range)
@@ -551,6 +559,13 @@ internal static class LiveMemoryCheatEngine {
     static bool _cachedFlingRunning = false;
 
     static EditorCheatState _lastSyncedState = new EditorCheatState();
+    static bool _flingCtlInitialized = false;
+    static int _prevFlingGod = 0;
+    static int _prevFlingSta = 0;
+    static int _prevFlingSpi = 0;
+    static int _prevFlingMSta = 0;
+    static int _prevFlingDef = 0;
+    static int _prevFlingDmg = 0;
 
     public static bool IsAttached {
         get { return hProc != IntPtr.Zero && (caveFling != IntPtr.Zero || IsExternalFlingTrainerRunning()); }
@@ -873,16 +888,35 @@ internal static class LiveMemoryCheatEngine {
 
         if (silverRecordPtr != 0 && currentSilver >= 0) {
             long pendGold = ReadI64(cf + OFF_DATA_PEND_GOLD);
+            // U15: a fresh 0 -> non-zero arm is a new request, so refill the retry budget. Without
+            // this, re-requesting the SAME amount (e.g. topping up again after spending) would
+            // inherit the previous request's exhausted counter and give up immediately.
+            if (_silverLastPendGold == 0L && pendGold > 0L) _silverRetryCount = 0;
+            _silverLastPendGold = pendGold;
             long targetGold = (explicitTargetGold > 0) ? explicitTargetGold : pendGold;
             if (targetGold > 0) {
                 byte[] goldBytes = BitConverter.GetBytes(targetGold);
                 for (int i = 0; i < matchedSilverPtrs.Count; i++) {
                     WriteBytes(matchedSilverPtrs[i] + 0x10, goldBytes);
                 }
+                if (targetGold != _silverLastAppliedTarget) {
+                    _silverLastAppliedTarget = targetGold;
+                    _silverRetryCount = 0;
+                }
                 if (matchedSilverPtrs.Count >= 2) {
                     WriteBytes(cf + OFF_DATA_PEND_GOLD, BitConverter.GetBytes(0L));
                 } else {
-                    WriteBytes(cf + OFF_DATA_PEND_GOLD, goldBytes);
+                    // U15: the single-container path used to re-arm pendGold unconditionally, so the
+                    // poll loop rewrote the same value ~4x/s forever (observed 2.5 min -> silent process
+                    // death, no crash dump). Clear pendGold once the write is verified, and keep the
+                    // retry bounded when the read-back does not match.
+                    long readBack = ReadI64(silverRecordPtr + 0x10);
+                    if (readBack == targetGold || _silverRetryCount >= SILVER_MAX_RETRY) {
+                        WriteBytes(cf + OFF_DATA_PEND_GOLD, BitConverter.GetBytes(0L));
+                    } else {
+                        _silverRetryCount++;
+                        WriteBytes(cf + OFF_DATA_PEND_GOLD, goldBytes);
+                    }
                 }
                 currentSilver = targetGold;
                 EngLog(string.Format("TryFindPlayerBagSilverRecord synchronized targetGold={0} across {1} container(s) (primary @0x{2:X})", targetGold, matchedSilverPtrs.Count, silverRecordPtr));
@@ -967,11 +1001,12 @@ internal static class LiveMemoryCheatEngine {
         flag = false;
     }
 
-    // Reverts the 7 exact code sites scanned by FLiNG Plus 12 Trainer AOBs so FLiNG never throws 'Address not found'
+    // Reverts the 7 exact code sites scanned by FLiNG Plus 12 Trainer AOBs (+ RVA_COMMIT which also touches StatComponent) so FLiNG never throws 'Address not found' or conflicts
     public static void RevertFlingOverlappingHooks() {
         if (hProc == IntPtr.Zero || baseAddr == 0) return;
         SafeRevertHookIfOwn(baseAddr + RVA_PLAYER,        VANILLA_PLAYER,        ref hookPlayerInstalled);
         SafeRevertHookIfOwn(baseAddr + RVA_STATS,         VANILLA_STATS,         ref hookStatsInstalled);
+        SafeRevertHookIfOwn(baseAddr + RVA_COMMIT,        VANILLA_COMMIT,        ref hookCommitInstalled);
         SafeRevertHookIfOwn(baseAddr + RVA_DEFENSE,       VANILLA_DEFENSE,       ref hookDefenseInstalled);
         SafeRevertHookIfOwn(baseAddr + RVA_DMG,           VANILLA_DMG,           ref hookDmgInstalled);
         SafeRevertHookIfOwn(baseAddr + RVA_SAVE_ITEM,     VANILLA_SAVE_ITEM,     ref hookSaveItemInstalled);
@@ -1169,6 +1204,9 @@ internal static class LiveMemoryCheatEngine {
         _lastValidInvMgrPtr = 0;
         _lastValidBagContPtr = 0;
         _lastValidSilverPtr = 0;
+        _silverLastAppliedTarget = 0L;
+        _silverLastPendGold = 0L;
+        _silverRetryCount = 0;
         _cachedSilver = -1L;
         _lastSilverQueryUtc = DateTime.MinValue;
         _lastFullSilverScanUtc = DateTime.MinValue;
@@ -1505,12 +1543,21 @@ internal static class LiveMemoryCheatEngine {
 
             if (extFlingActive) {
                 RevertFlingOverlappingHooks();
-                WriteFlingCtl(FLING_ADDR_GODMODE,   BitConverter.GetBytes(bGodMode));
-                WriteFlingCtl(FLING_ADDR_STAMINA,   BitConverter.GetBytes(pStaMode > 0 ? 1 : 0));
-                WriteFlingCtl(FLING_ADDR_SPIRIT,    BitConverter.GetBytes(cdMode > 0 ? 1 : 0));
-                WriteFlingCtl(FLING_ADDR_MOUNT_STA, BitConverter.GetBytes(mStaMode > 0 ? 1 : 0));
-                WriteFlingCtl(FLING_ADDR_DEFENSE,   BitConverter.GetBytes(actualDefVal > 0 ? Math.Max(1, actualDefVal / 100) : 0));
-                WriteFlingCtl(FLING_ADDR_DMG,       BitConverter.GetBytes(dmgModeVal));
+                int fSta = (pStaMode > 0) ? 1 : 0;
+                int fSpi = (cdMode > 0 || pStaMode > 0) ? 1 : 0;
+                int fMSta = (mStaMode > 0) ? 1 : 0;
+                int fDef = (actualDefVal > 0) ? Math.Max(1, actualDefVal / 100) : 0;
+                if (!_flingCtlInitialized || bGodMode != _prevFlingGod)   WriteFlingCtl(FLING_ADDR_GODMODE,   BitConverter.GetBytes(bGodMode));
+                if (!_flingCtlInitialized || fSta != _prevFlingSta)       WriteFlingCtl(FLING_ADDR_STAMINA,   BitConverter.GetBytes(fSta));
+                if (!_flingCtlInitialized || fSpi != _prevFlingSpi)       WriteFlingCtl(FLING_ADDR_SPIRIT,    BitConverter.GetBytes(fSpi));
+                if (!_flingCtlInitialized || fMSta != _prevFlingMSta)     WriteFlingCtl(FLING_ADDR_MOUNT_STA, BitConverter.GetBytes(fMSta));
+                if (!_flingCtlInitialized || fDef != _prevFlingDef)       WriteFlingCtl(FLING_ADDR_DEFENSE,   BitConverter.GetBytes(fDef));
+                if (!_flingCtlInitialized || dmgModeVal != _prevFlingDmg) WriteFlingCtl(FLING_ADDR_DMG,       BitConverter.GetBytes(dmgModeVal));
+                _prevFlingGod = bGodMode; _prevFlingSta = fSta; _prevFlingSpi = fSpi;
+                _prevFlingMSta = fMSta; _prevFlingDef = fDef; _prevFlingDmg = dmgModeVal;
+                _flingCtlInitialized = true;
+            } else {
+                _flingCtlInitialized = false;
             }
 
             // Craft & Gear & Imbue
@@ -1615,7 +1662,7 @@ internal static class LiveMemoryCheatEngine {
             bool needDmg = !extFlingActive && (dmgModeVal > 0 || st.WeaponImbueMode > 0);
             bool needPlayer = !extFlingActive && (!haveCorePtrs || needStatsFeature || needDefense || needDmg);
             bool needStats = !extFlingActive && (!haveCorePtrs || needStatsFeature);
-            bool needCommit = (bGodMode != 0 || pStaMode != 0 || cdMode != 0)
+            bool needCommit = !extFlingActive && (bGodMode != 0 || pStaMode != 0 || cdMode != 0)
                            && (IsValidGameHeapPtr(_lastValidStaPtr) || IsValidGameHeapPtr(_lastValidSpiPtr) || IsValidGameHeapPtr(_lastValidHpPtr));
 
             byte[] pendingGoldB = ReadBytes(cf + OFF_DATA_PEND_GOLD, 8);
@@ -2341,6 +2388,7 @@ internal static class LiveMemoryCheatEngine {
             EmitJcc32(code, refs, 0x85, "fill_max_and_save");
             code.AddRange(new byte[] { 0x85, 0xC9 });
             EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0xC6, 0x40, 0x52, 0x00 });             // mov byte ptr [rax+0x52], 0 (clear player stamina exhaustion lock)
             code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });                   // mode 4 = Infinite Stamina
             EmitJcc32(code, refs, 0x84, "fill_max_and_save");
             code.AddRange(new byte[] { 0x83, 0xF9, 0x03 });                   // mode 3 = 2x Regen + -30% drain
@@ -2368,13 +2416,18 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x63, 0xD2, 0x48, 0x69, 0xD2, 0xE8, 0x03, 0x00, 0x00, 0x48, 0x89, 0x50, 0x18 });
             lbl["p_spi_inf"] = code.Count;
             EmitMovabsRdx(code, dCdMode);
-            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dCdMode]
+            code.AddRange(new byte[] { 0x8B, 0x0A, 0x85, 0xC9 });             // ecx = [dCdMode]; test ecx, ecx
+            EmitJcc32(code, refs, 0x8F, "p_spi_has_mode");
+            EmitMovabsRdx(code, dStaMode);                                    // fallback: PlayerStaminaMode also protects Spirit/무력기력 (id 18)
+            code.AddRange(new byte[] { 0x8B, 0x0A });                         // ecx = [dStaMode]
+            lbl["p_spi_has_mode"] = code.Count;
             EmitMovabsRdx(code, dSleepTrig);
             code.AddRange(new byte[] { 0x83, 0x3A, 0x00 });
             EmitMovabsRdx(code, dPrevSpi);                                    // rdx = &dPrevSpi
             EmitJcc32(code, refs, 0x85, "fill_max_and_save");
             code.AddRange(new byte[] { 0x85, 0xC9 });
             EmitJcc32(code, refs, 0x8E, "save_prev");
+            code.AddRange(new byte[] { 0xC6, 0x40, 0x52, 0x00 });             // mov byte ptr [rax+0x52], 0 (clear exhaustion lock)
             code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });                   // mode 4 = Infinite Spirit / 0s Cooldown
             EmitJcc32(code, refs, 0x84, "fill_max_and_save");
             EmitJmp32(code, refs, "mode_123_to_pct");
@@ -2391,6 +2444,7 @@ internal static class LiveMemoryCheatEngine {
             EmitMovabsRdx(code, dPrevMSta);                                   // rdx = &dPrevMSta
             code.AddRange(new byte[] { 0x85, 0xC9 });
             EmitJcc32(code, refs, 0x8E, "done");
+            code.AddRange(new byte[] { 0xC6, 0x40, 0x52, 0x00 });             // mov byte ptr [rax+0x52], 0 (clear mount exhaustion lock)
             code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });
             EmitJcc32(code, refs, 0x84, "fill_max_and_save");
             EmitJmp32(code, refs, "mode_123_to_pct");
@@ -2398,6 +2452,7 @@ internal static class LiveMemoryCheatEngine {
             // --- Shared Proportional Refund & Max Lock Helpers ---
             lbl["fill_max_and_save"] = code.Count;
             EmitRipIncDword(code, stBase, dCommitCnt);
+            code.AddRange(new byte[] { 0xC6, 0x40, 0x52, 0x00 });             // mov byte ptr [rax+0x52], 0 (clear exhaustion lock)
             code.AddRange(new byte[] { 0x48, 0x8B, 0x58, 0x18, 0x48, 0x85, 0xDB }); // rbx = [rax+0x18]
             EmitJcc32(code, refs, 0x8E, "done");
             code.AddRange(new byte[] { 0x48, 0x89, 0x58, 0x08 });             // [rax+0x08] = rbx
@@ -2418,6 +2473,7 @@ internal static class LiveMemoryCheatEngine {
 
             lbl["apply_refund"] = code.Count;
             EmitRipIncDword(code, stBase, dCommitCnt);
+            code.AddRange(new byte[] { 0xC6, 0x40, 0x52, 0x00 });             // mov byte ptr [rax+0x52], 0 (clear exhaustion lock)
             code.AddRange(new byte[] { 0x48, 0x8B, 0x1A, 0x48, 0x85, 0xDB }); // rbx = [rdx] (prev)
             EmitJcc32(code, refs, 0x8E, "save_prev");
             code.AddRange(new byte[] { 0x48, 0x2B, 0x58, 0x08 });             // rbx = prev - cur (drain)
@@ -2456,6 +2512,11 @@ internal static class LiveMemoryCheatEngine {
             var refs = new List<Rel32Ref>();
             var lbl = new Dictionary<string, int>();
             code.AddRange(new byte[] { 0x50, 0x51, 0x52 });                   // push rax, rcx, rdx
+            // U15: the detour runs cmp/test/imul/idiv/add, all of which clobber RFLAGS, and the
+            // vanilla tail (two movs) does not restore them. Save/restore the flags so code after
+            // RVA_COMMIT+9 still sees the flags its own earlier instructions set. The 4th push also
+            // brings the cave to 32B of stack, keeping the entry RSP % 16 parity.
+            code.Add(0x9C);                                                   // pushfq
             code.AddRange(new byte[] { 0x48, 0x81, 0xFF, 0x00, 0x00, 0x00, 0x10 }); // cmp rdi, 0x10000000
             EmitJcc32(code, refs, 0x82, "done");
             code.AddRange(new byte[] { 0x48, 0x89, 0xF9, 0x48, 0xC1, 0xE9, 0x2F }); // mov rcx, rdi; shr rcx, 47
@@ -2499,8 +2560,12 @@ internal static class LiveMemoryCheatEngine {
             code.AddRange(new byte[] { 0x48, 0x3B, 0x3A });                   // cmp rdi, [dPSpiPtr]
             EmitJcc32(code, refs, 0x85, "chk_hp");
             EmitMovabsRdx(code, dCdMode);
-            code.AddRange(new byte[] { 0x8B, 0x0A, 0x85, 0xC9 });
+            code.AddRange(new byte[] { 0x8B, 0x0A, 0x85, 0xC9 });             // ecx = [dCdMode]; test ecx, ecx
+            EmitJcc32(code, refs, 0x8F, "c_spi_has_mode");
+            EmitMovabsRdx(code, dStaMode);                                    // fallback: PlayerStaminaMode also protects Spirit/무력기력
+            code.AddRange(new byte[] { 0x8B, 0x0A, 0x85, 0xC9 });             // ecx = [dStaMode]; test ecx, ecx
             EmitJcc32(code, refs, 0x8E, "done");
+            lbl["c_spi_has_mode"] = code.Count;
             code.AddRange(new byte[] { 0x83, 0xF9, 0x04 });
             EmitJcc32(code, refs, 0x84, "fill_max");
             code.AddRange(new byte[] { 0x48, 0x89, 0xD8, 0x48, 0x2B, 0x47, 0x08 });
@@ -2538,14 +2603,21 @@ internal static class LiveMemoryCheatEngine {
             EmitJcc32(code, refs, 0x84, "done");
 
             lbl["fill_max"] = code.Count;
+            code.AddRange(new byte[] { 0xC6, 0x47, 0x52, 0x00 });             // mov byte ptr [rdi+0x52], 0 (clear exhaustion lock even when already at max)
             code.AddRange(new byte[] { 0x48, 0x3B, 0x5F, 0x18 });
             EmitJcc32(code, refs, 0x8D, "done");
             code.AddRange(new byte[] { 0x48, 0x8B, 0x5F, 0x18 });
 
             lbl["inc_ret"] = code.Count;
+            code.AddRange(new byte[] { 0xC6, 0x47, 0x52, 0x00 });             // mov byte ptr [rdi+0x52], 0 (clear exhaustion lock Set at RVA_COMMIT-0x4D)
+            code.AddRange(new byte[] { 0x48, 0x89, 0xD8, 0x48, 0x2B, 0x47, 0x18, 0x48, 0x89, 0x47, 0x20 }); // [rdi+0x20] = rbx - [rdi+0x18] (keep deficit field consistent)
             EmitRipIncDword(code, cBase, dCommitCnt);
 
+            // done: MUST land on popfq, not on the pops - every "done" branch above skips the
+            // body with the flags still pushed, so jumping past popfq would leave RSP +8 and make
+            // the vanilla tail's mov rbx,[rsp+0x48] read the wrong slot.
             lbl["done"] = code.Count;
+            code.Add(0x9D);                                                   // popfq
             code.AddRange(new byte[] { 0x5A, 0x59, 0x58 });                   // pop rdx, rcx, rax
             code.AddRange(VANILLA_COMMIT);                                    // mov [rdi+8], rbx; mov rbx, [rsp+0x48]
             ResolveLabels(code, lbl, refs);
@@ -3581,7 +3653,7 @@ internal static class LiveMemoryCheatEngine {
             }
             if (resolvedDirect && sPtr != 0) {
                 WriteBytes(cf + OFF_DATA_CUR_SILVER, goldBytes);
-                WriteBytes(cf + OFF_DATA_PEND_GOLD, goldBytes); // Keep in pendGold so next save/UI refresh also syncs any newly opened container!
+                // Do NOT re-arm OFF_DATA_PEND_GOLD here: TryFindPlayerBagSilverRecord already cleared it (or bounded-retried it) so we don't trigger a 250ms write storm!
                 EngLog(string.Format("InjectGoldToMemory LIVE OK @0x{0:X}: {1} -> {2}", sPtr, curSil, targetGold));
             } else {
                 WriteBytes(cf + OFF_DATA_PEND_GOLD, goldBytes);

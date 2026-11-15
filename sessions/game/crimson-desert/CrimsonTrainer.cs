@@ -1179,14 +1179,14 @@ class Launcher : Form {
     internal int craftCostMode = 0; // 0: 정상소모, 1: 25%할인, 2: 50%반값, 3: 75%할인, 4: 무재료
     internal int craftSuccessMultiplier = 1; // 1: 정상, 2: 2배, 3: 3배, 5: 5배, 999: 전설 100%
     internal int durabilityMode = 0; // 0: 정상소모, 1: -30%, 2: -50%, 3: -75%, 4: 무한
-    internal int thiefStealthMode = 1; // 0: 정상, 1: 도둑질 무죄·발각0%·현상금0%(대도의 장갑 상시)
-    internal int thiefDetectionMode = 3;     // 0: 정상, 1: -50%, 2: -80%, 3: 발각0%(완전은신)
-    internal int pickpocketSuccessMode = 3;  // 0: 정상, 1: x2, 2: x3, 3: 100% 무조건성공
-    internal int bountyImmunityMode = 3;     // 0: 정상, 1: -50%, 2: 0G, 3: 영구무죄(악명0)
-    internal int thiefGloveFenceMode = 1;    // 0: 미착용, 1: 기본착용ON, 2: 모든세이브, 3: 장물100%매입
-    internal int bagExpandSlots = 60;        // 0: 기본, 20: +20, 40: +40, 60: +60, 900: 창고900
-    internal int specialConvenienceMode = 2; // 0: OFF, 1: 즉시수면, 2: 낙하0면제, 3: 자유비행ON
-    internal int gearHiderMode = 1; // 0: 전체표시, 1: 투구숨김(기본 ON), 2: 망토숨김, 3: 투구+망토+납도무기 숨김
+    internal int thiefStealthMode = 0; // 0: 정상, 1: 도둑질 무죄·발각0%·현상금0%(대도의 장갑 상시)
+    internal int thiefDetectionMode = 0;     // 0: 정상, 1: -50%, 2: -80%, 3: 발각0%(완전은신)
+    internal int pickpocketSuccessMode = 0;  // 0: 정상, 1: x2, 2: x3, 3: 100% 무조건성공
+    internal int bountyImmunityMode = 0;     // 0: 정상, 1: -50%, 2: 0G, 3: 영구무죄(악명0)
+    internal int thiefGloveFenceMode = 0;    // 0: 미착용, 1: 기본착용ON, 2: 모든세이브, 3: 장물100%매입
+    internal int bagExpandSlots = 0;         // 0: 기본, 20: +20, 40: +40, 60: +60, 900: 창고900
+    internal int specialConvenienceMode = 0; // 0: OFF, 1: 즉시수면, 2: 낙하0면제, 3: 자유비행ON
+    internal int gearHiderMode = 0; // 0: 전체표시, 1: 투구숨김(기본 ON), 2: 망토숨김, 3: 투구+망토+납도무기 숨김
     internal int weaponImbueMode = 0; // 0: 없음, 1: 화염폭발, 2: 빙결제압, 3: 뇌전연쇄, 4: 흡혈+치명, 5: 전속성마스터
     internal bool isNativeAaClarity = true; // true: 100% 네이티브 1080p AA 고선명 모드 (칼같은 선명도·화질 극대화), false: 67% FSR Quality
     internal string activeFsrScaleLabel = "67%";
@@ -1330,12 +1330,21 @@ class Launcher : Form {
         _suppressConfigSave = true;
         try {
             ResetAllToVanilla();
-            if (!SelfTestMode) {
+            if (!SelfTestMode && !DumpUiMode) {
                 LoadCheatConfig(null);
+                // Always start movement/jump speeds and glide/fly at 1.0x vanilla so stale INI never causes fast-speed crashes on launch
+                SetSpeedMultiplier(1.0f);
+                SetJumpMultiplier(1.0f);
+                SetMountSpeed(1.0f);
+                SetUnderwaterSpeed(1.0f);
+                SetSpecialConvenienceMode(0);
                 SyncClarityFromConfigXml();
             }
         } finally {
             _suppressConfigSave = prevSup;
+        }
+        if (!SelfTestMode && !DumpUiMode) {
+            SaveCheatConfigImmediate(null);
         }
 
         var cheatTimer = new System.Windows.Forms.Timer { Interval = 250 };
@@ -1464,7 +1473,7 @@ class Launcher : Form {
 
     internal void SaveCheatConfigImmediate(string customPath = null) {
         if (_suppressConfigSave) return;
-        if (SelfTestMode && string.IsNullOrEmpty(customPath)) return;
+        if ((SelfTestMode || DumpUiMode) && string.IsNullOrEmpty(customPath)) return;
         try {
             string iniPath = string.IsNullOrEmpty(customPath) ? Path.Combine(root, "tuning", "CrimsonDesert_CheatConfig.ini") : customPath;
             string dir = Path.GetDirectoryName(iniPath);
@@ -4263,7 +4272,10 @@ class Launcher : Form {
                         // Gate 6: Trigger gate, unauthorized self-test default false, and HUD hitmap export (7 top + 4 tabs + 129 row buttons)
                         if (!Launcher.ValidateTriggerPhrase(Launcher.REQUIRED_SELF_TEST_TRIGGER) || Launcher.ValidateTriggerPhrase("시작") || Launcher.ValidateTriggerPhrase(""))
                             throw new Exception("Gate 6 ValidateTriggerPhrase failed");
-                        if (l5.IsAuthorizedSelfTestActive())
+                        string apStatus = Path.Combine(rootDir, @"tuning\research\rsi_telemetry\auto_play_status.json");
+                        bool externalAuthorizedRunLive = File.Exists(apStatus) && (DateTime.UtcNow - File.GetLastWriteTimeUtc(apStatus)).TotalSeconds <= 90.0
+                            && File.ReadAllText(apStatus, Encoding.UTF8).IndexOf("\"running\": true", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (!externalAuthorizedRunLive && l5.IsAuthorizedSelfTestActive())
                             throw new Exception("Gate 6 IsAuthorizedSelfTestActive should be false by default");
                         string hitDir = Path.Combine(dir, "hitmaps");
                         Directory.CreateDirectory(hitDir);
