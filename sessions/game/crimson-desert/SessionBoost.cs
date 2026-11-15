@@ -536,6 +536,186 @@ internal static class LiveMemoryCheatEngine {
     static bool hookCountItemsInstalled   = false;
     static bool hookWantedEvalInstalled   = false;
 
+    // U16 v3.1: Ordered 7-state hook telemetry partition & synchronous snapshot at SyncSingleHook end
+    public const string HOOK_STATE_DISARM_PENDING   = "DISARM_PENDING";
+    public const string HOOK_STATE_ARMED_HITS       = "ARMED_HITS";
+    public const string HOOK_STATE_ARMED_0_HITS     = "ARMED_0_HITS";
+    public const string HOOK_STATE_YIELDED_TO_FLING = "YIELDED_TO_FLING";
+    public const string HOOK_STATE_ARM_FAILED       = "ARM_FAILED";
+    public const string HOOK_STATE_DISARMED         = "DISARMED";
+    public const string HOOK_STATE_NOT_REQUESTED    = "NOT_REQUESTED";
+
+    public const string FAIL_REASON_NONE             = "";
+    public const string FAIL_REASON_VANILLA_MISMATCH = "VANILLA_MISMATCH";
+    public const string FAIL_REASON_ALLOC_FAIL       = "ALLOC_FAIL";
+    public const string FAIL_REASON_TRAMPOLINE_FAIL  = "TRAMPOLINE_FAIL";
+    public const string FAIL_REASON_UNKNOWN          = "UNKNOWN";
+
+    public static readonly string[] U16TrackedHooks = new string[] {
+        "SAVE_ITEM", "SELECTED_ITEM", "DURABILITY", "CRIME_EVAL", "ROMANCE_TRUST", "WANTED_EVAL"
+    };
+
+    public struct HookTelemetryTuple {
+        public readonly string State;
+        public readonly bool EverArmed;
+        public readonly int HitsTotal;
+        public readonly string FailReason;
+
+        public HookTelemetryTuple(string state, bool everArmed, int hitsTotal, string failReason) {
+            State = state ?? HOOK_STATE_NOT_REQUESTED;
+            EverArmed = everArmed;
+            HitsTotal = Math.Max(0, hitsTotal);
+            FailReason = failReason ?? FAIL_REASON_NONE;
+        }
+
+        public string ToFourTupleString() {
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "({0}, {1}, {2}, {3})",
+                State,
+                EverArmed ? "true" : "false",
+                HitsTotal,
+                FailReason ?? ""
+            );
+        }
+
+        public string ToJsonObject() {
+            string safeReason = (FailReason ?? "").Replace("\\", "\\\\").Replace("\"", "'");
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{{\"state\": \"{0}\", \"ever_armed\": {1}, \"hits_total\": {2}, \"fail_reason\": \"{3}\"}}",
+                State,
+                EverArmed ? "true" : "false",
+                HitsTotal,
+                safeReason
+            );
+        }
+    }
+
+    static readonly object _hookTelemetryLock = new object();
+    static Dictionary<string, HookTelemetryTuple> _publishedHookSnapshots = CreateInitialHookSnapshots();
+
+    static Dictionary<string, HookTelemetryTuple> CreateInitialHookSnapshots() {
+        var d = new Dictionary<string, HookTelemetryTuple>(StringComparer.Ordinal);
+        for (int i = 0; i < U16TrackedHooks.Length; i++) {
+            d[U16TrackedHooks[i]] = new HookTelemetryTuple(HOOK_STATE_NOT_REQUESTED, false, 0, FAIL_REASON_NONE);
+        }
+        return d;
+    }
+
+    public static void ResetPublishedHookStatesSnapshot() {
+        lock (_hookTelemetryLock) {
+            System.Threading.Interlocked.Exchange(ref _publishedHookSnapshots, CreateInitialHookSnapshots());
+        }
+    }
+
+    public static Dictionary<string, HookTelemetryTuple> GetPublishedHookStatesSnapshot() {
+        return _publishedHookSnapshots;
+    }
+
+    public static bool YieldsToFling(string hookName) {
+        return string.Equals(hookName, "SAVE_ITEM", StringComparison.Ordinal)
+            || string.Equals(hookName, "SELECTED_ITEM", StringComparison.Ordinal);
+    }
+
+    static string NormalizeFailReason(string rawFailReason) {
+        if (string.Equals(rawFailReason, FAIL_REASON_VANILLA_MISMATCH, StringComparison.Ordinal)
+            || string.Equals(rawFailReason, FAIL_REASON_ALLOC_FAIL, StringComparison.Ordinal)
+            || string.Equals(rawFailReason, FAIL_REASON_TRAMPOLINE_FAIL, StringComparison.Ordinal)
+            || string.Equals(rawFailReason, FAIL_REASON_UNKNOWN, StringComparison.Ordinal)) {
+            return rawFailReason;
+        }
+        return FAIL_REASON_UNKNOWN;
+    }
+
+    public static HookTelemetryTuple EvaluateHookTelemetryTuple(
+        string hookName,
+        bool installed,
+        bool requestedRaw,
+        bool extFlingActive,
+        bool prevEverArmed,
+        int prevHitsTotal,
+        int liveHits,
+        string rawFailReason
+    ) {
+        bool everArmed = prevEverArmed || installed;
+        int hitsTotal = Math.Max(0, Math.Max(prevHitsTotal, liveHits));
+        bool yields = YieldsToFling(hookName);
+
+        // Ordered, mutually exclusive, exhaustive 7-state partition (first match wins):
+        // 1. installed && !requested_raw -> DISARM_PENDING
+        if (installed && !requestedRaw) {
+            return new HookTelemetryTuple(HOOK_STATE_DISARM_PENDING, everArmed, hitsTotal, FAIL_REASON_NONE);
+        }
+        // 2. installed && requested_raw && hits_total > 0 -> ARMED_HITS
+        if (installed && requestedRaw && hitsTotal > 0) {
+            return new HookTelemetryTuple(HOOK_STATE_ARMED_HITS, everArmed, hitsTotal, FAIL_REASON_NONE);
+        }
+        // 3. installed && requested_raw && hits_total == 0 -> ARMED_0_HITS
+        if (installed && requestedRaw && hitsTotal == 0) {
+            return new HookTelemetryTuple(HOOK_STATE_ARMED_0_HITS, everArmed, hitsTotal, FAIL_REASON_NONE);
+        }
+        // 4. !installed && requested_raw && yields_to_fling(h) && extFlingActive -> YIELDED_TO_FLING
+        if (!installed && requestedRaw && yields && extFlingActive) {
+            return new HookTelemetryTuple(HOOK_STATE_YIELDED_TO_FLING, everArmed, hitsTotal, FAIL_REASON_NONE);
+        }
+        // 5. !installed && requested_raw -> ARM_FAILED (reason required)
+        if (!installed && requestedRaw) {
+            return new HookTelemetryTuple(HOOK_STATE_ARM_FAILED, everArmed, hitsTotal, NormalizeFailReason(rawFailReason));
+        }
+        // 6. !installed && !requested_raw && ever_armed -> DISARMED
+        if (!installed && !requestedRaw && everArmed) {
+            return new HookTelemetryTuple(HOOK_STATE_DISARMED, everArmed, hitsTotal, FAIL_REASON_NONE);
+        }
+        // 7. !installed && !requested_raw -> NOT_REQUESTED
+        return new HookTelemetryTuple(HOOK_STATE_NOT_REQUESTED, everArmed, hitsTotal, FAIL_REASON_NONE);
+    }
+
+    public static HookTelemetryTuple PublishHookTelemetryFromSync(
+        string name,
+        bool installed,
+        bool requestedRaw,
+        bool extFlingActive,
+        int liveHits,
+        string failReason
+    ) {
+        if (string.IsNullOrEmpty(name)) return new HookTelemetryTuple(HOOK_STATE_NOT_REQUESTED, false, 0, FAIL_REASON_NONE);
+        lock (_hookTelemetryLock) {
+            var curMap = _publishedHookSnapshots;
+            HookTelemetryTuple prev;
+            if (!curMap.TryGetValue(name, out prev)) {
+                prev = new HookTelemetryTuple(HOOK_STATE_NOT_REQUESTED, false, 0, FAIL_REASON_NONE);
+            }
+            HookTelemetryTuple next = EvaluateHookTelemetryTuple(
+                name, installed, requestedRaw, extFlingActive,
+                prev.EverArmed, prev.HitsTotal, liveHits, failReason
+            );
+            var nextMap = new Dictionary<string, HookTelemetryTuple>(curMap, StringComparer.Ordinal);
+            nextMap[name] = next;
+            System.Threading.Interlocked.Exchange(ref _publishedHookSnapshots, nextMap);
+            return next;
+        }
+    }
+
+    static int ReadSingleHookHitsFromCave(string name) {
+        if (hProc == IntPtr.Zero || caveFling == IntPtr.Zero) return 0;
+        long cf = caveFling.ToInt64();
+        long off = 0;
+        if (string.Equals(name, "SAVE_ITEM", StringComparison.Ordinal)) off = OFF_DATA_SAVE_HITS;
+        else if (string.Equals(name, "SELECTED_ITEM", StringComparison.Ordinal)) off = OFF_DATA_SEL_HITS;
+        else if (string.Equals(name, "DURABILITY", StringComparison.Ordinal)) off = OFF_DATA_DUR_HITS;
+        else if (string.Equals(name, "CRIME_EVAL", StringComparison.Ordinal)) off = OFF_DATA_CRIME_HITS;
+        else if (string.Equals(name, "ROMANCE_TRUST", StringComparison.Ordinal)) off = OFF_DATA_ROM_HITS;
+        else if (string.Equals(name, "WANTED_EVAL", StringComparison.Ordinal)) off = OFF_DATA_WANTED_HITS;
+        else if (string.Equals(name, "HORSE_TAMING", StringComparison.Ordinal)) off = OFF_DATA_TAMING_HITS;
+        else if (string.Equals(name, "BREATH_VITALS", StringComparison.Ordinal)) off = OFF_DATA_BREATH_HITS;
+        else if (string.Equals(name, "SLOT_EXPAND", StringComparison.Ordinal)) off = OFF_DATA_SLOT_HITS;
+        else if (string.Equals(name, "COUNT_ITEMS", StringComparison.Ordinal)) off = OFF_DATA_CNT_HITS;
+        else if (string.Equals(name, "COMMIT", StringComparison.Ordinal)) off = OFF_DATA_COMMIT_CNT;
+        if (off == 0) return 0;
+        return ReadI32(cf + off);
+    }
+
     static bool expOrphanChecked = false;
     static bool commitOrphanChecked = false;
     static long lastCommitLogTicks = 0;
@@ -967,7 +1147,21 @@ internal static class LiveMemoryCheatEngine {
     }
 
     static void SyncSingleHook(string name, bool wantInstall, ref bool flag, long siteAddr, long trampAddr, byte[] vanilla) {
-        if (hProc == IntPtr.Zero || baseAddr == 0 || caveFling == IntPtr.Zero) return;
+        bool extFling = ExtFlingRunning();
+        bool requestedRaw = wantInstall || (YieldsToFling(name) && extFling);
+        int liveHits = ReadSingleHookHitsFromCave(name);
+        SyncSingleHook(name, wantInstall, ref flag, siteAddr, trampAddr, vanilla, requestedRaw, extFling, liveHits);
+    }
+
+    static void SyncSingleHook(string name, bool wantInstall, ref bool flag, long siteAddr, long trampAddr, byte[] vanilla, bool requestedRaw, bool extFlingActive, int liveHits) {
+        string failReason = FAIL_REASON_NONE;
+        if (hProc == IntPtr.Zero || baseAddr == 0 || caveFling == IntPtr.Zero || !trampolinesReady) {
+            if (wantInstall && !flag) {
+                failReason = (caveFling == IntPtr.Zero) ? FAIL_REASON_ALLOC_FAIL : (!trampolinesReady ? FAIL_REASON_TRAMPOLINE_FAIL : FAIL_REASON_UNKNOWN);
+            }
+            PublishHookTelemetryFromSync(name, flag, requestedRaw, extFlingActive, liveHits, failReason);
+            return;
+        }
         if (wantInstall) {
             if (!flag) {
                 byte[] cur = ReadBytes(siteAddr, vanilla.Length);
@@ -975,22 +1169,28 @@ internal static class LiveMemoryCheatEngine {
                     if (WriteRelJmp5(siteAddr, trampAddr, vanilla.Length)) {
                         flag = true;
                         EngLog("Hook ON: " + name);
+                    } else {
+                        failReason = FAIL_REASON_TRAMPOLINE_FAIL;
                     }
                 } else {
+                    failReason = FAIL_REASON_VANILLA_MISMATCH;
                     EngLog("Hook REFUSED (" + name + "): non-vanilla site bytes");
                 }
             }
         } else {
             if (flag) {
                 if (IsOwnHookAt(siteAddr, vanilla, 0)) {
-                    WriteBytes(siteAddr, vanilla);
-                    EngLog("Hook OFF: " + name);
+                    if (WriteBytes(siteAddr, vanilla)) {
+                        flag = false;
+                        EngLog("Hook OFF: " + name);
+                    }
                 } else {
                     EngLog("Hook YIELD (" + name + "): site owned by external trainer");
+                    flag = false;
                 }
-                flag = false;
             }
         }
+        PublishHookTelemetryFromSync(name, flag, requestedRaw, extFlingActive, liveHits, failReason);
     }
 
     static void SafeRevertHookIfOwn(long siteAddr, byte[] vanilla, ref bool flag) {
@@ -1672,8 +1872,10 @@ internal static class LiveMemoryCheatEngine {
             long invMgrVal = ReadI64(cf + OFF_DATA_INV_MGR_PTR);
             long bagContVal = ReadI64(cf + OFF_DATA_BAG_CONT_PTR);
             bool silverPtrValid = IsValidGameHeapPtr(ReadI64(cf + OFF_DATA_SILVER_PTR));
-            bool needSaveItem = !extFlingActive && (pendingGoldVal > 0 || editHoverVal > 0 || st.CraftMaterialCost > 0 || !silverPtrValid);
-            bool needSelectedItem = !extFlingActive && (pendingGoldVal > 0 || editHoverVal > 0 || !silverPtrValid);
+            bool rawSaveItem = (pendingGoldVal > 0 || editHoverVal > 0 || st.CraftMaterialCost > 0 || !silverPtrValid);
+            bool rawSelectedItem = (pendingGoldVal > 0 || editHoverVal > 0 || !silverPtrValid);
+            bool needSaveItem = !extFlingActive && rawSaveItem;
+            bool needSelectedItem = !extFlingActive && rawSelectedItem;
 
             bool needKiss = (effSpeed > 1.01f || st.JumpMultiplier > 1.05f || freeFlightActive);
             bool needDaytime = !extFlingActive && (st.FreezeDaytime || FreezeDaytimeEnabled);
@@ -1714,28 +1916,44 @@ internal static class LiveMemoryCheatEngine {
                 }
             }
 
+            int syncDurHits = 0, syncCrimeHits = 0, syncTameHits = 0, syncBreathHits = 0, syncSlotHits = 0;
+            int syncSaveHits = 0, syncSelHits = 0, syncRomHits = 0, syncCntHits = 0, syncWantedHits = 0;
+            byte[] hitBlk = ReadBytes(cf + OFF_DATA_DUR_HITS, 40);
+            if (hitBlk != null && hitBlk.Length >= 40) {
+                syncDurHits    = BitConverter.ToInt32(hitBlk, 0);
+                syncCrimeHits  = BitConverter.ToInt32(hitBlk, 4);
+                syncTameHits   = BitConverter.ToInt32(hitBlk, 8);
+                syncBreathHits = BitConverter.ToInt32(hitBlk, 12);
+                syncSlotHits   = BitConverter.ToInt32(hitBlk, 16);
+                syncSaveHits   = BitConverter.ToInt32(hitBlk, 20);
+                syncSelHits    = BitConverter.ToInt32(hitBlk, 24);
+                syncRomHits    = BitConverter.ToInt32(hitBlk, 28);
+                syncCntHits    = BitConverter.ToInt32(hitBlk, 32);
+                syncWantedHits = BitConverter.ToInt32(hitBlk, 36);
+            }
+
             // 3. Synchronize All 21 Hook Sites Strictly On-Demand (7 FLiNG AOB sites yielded when extFlingActive)
             SyncSingleHook("PLAYER",        needPlayer,       ref hookPlayerInstalled,       baseAddr + RVA_PLAYER,        cf + OFF_CODE_PLAYER,        VANILLA_PLAYER);
             SyncSingleHook("STATS",         needStats,        ref hookStatsInstalled,        baseAddr + RVA_STATS,         cf + OFF_CODE_STATS,         VANILLA_STATS);
             SyncSingleHook("COMMIT",        needCommit,       ref hookCommitInstalled,       baseAddr + RVA_COMMIT,        cf + OFF_CODE_COMMIT,        VANILLA_COMMIT);
             SyncSingleHook("DEFENSE",       needDefense,      ref hookDefenseInstalled,      baseAddr + RVA_DEFENSE,       cf + OFF_CODE_DEFENSE,       VANILLA_DEFENSE);
             SyncSingleHook("DMG",           needDmg,          ref hookDmgInstalled,          baseAddr + RVA_DMG,           cf + OFF_CODE_DMG,           VANILLA_DMG);
-            SyncSingleHook("SAVE_ITEM",     needSaveItem,     ref hookSaveItemInstalled,     baseAddr + RVA_SAVE_ITEM,     cf + OFF_CODE_SAVE_ITEM,     VANILLA_SAVE_ITEM);
-            SyncSingleHook("SELECTED_ITEM", needSelectedItem, ref hookSelectedItemInstalled, baseAddr + RVA_SELECTED_ITEM, cf + OFF_CODE_SELECTED_ITEM, VANILLA_SELECTED_ITEM);
+            SyncSingleHook("SAVE_ITEM",     needSaveItem,     ref hookSaveItemInstalled,     baseAddr + RVA_SAVE_ITEM,     cf + OFF_CODE_SAVE_ITEM,     VANILLA_SAVE_ITEM,     rawSaveItem,     extFlingActive, syncSaveHits);
+            SyncSingleHook("SELECTED_ITEM", needSelectedItem, ref hookSelectedItemInstalled, baseAddr + RVA_SELECTED_ITEM, cf + OFF_CODE_SELECTED_ITEM, VANILLA_SELECTED_ITEM, rawSelectedItem, extFlingActive, syncSelHits);
             SyncSingleHook("KISS",          needKiss,         ref hookKissInstalled,         baseAddr + RVA_KISS,          cf + OFF_CODE_KISS,          VANILLA_KISS);
             SyncSingleHook("DAYTIME",       needDaytime,      ref hookDaytimeInstalled,      baseAddr + RVA_DAYTIME,       cf + OFF_CODE_DAYTIME,       VANILLA_DAYTIME);
             SyncSingleHook("EXP",           needExp,          ref hookExpInstalled,          baseAddr + RVA_EXP,           cf + OFF_CODE_EXP,           VANILLA_EXP);
-            SyncSingleHook("DURABILITY",    needDurability,   ref hookDurabilityInstalled,   baseAddr + RVA_DURABILITY,    cf + OFF_CODE_DURABILITY,    VANILLA_DURABILITY);
-            SyncSingleHook("CRIME_EVAL",    needCrime,        ref hookCrimeEvalInstalled,    baseAddr + RVA_CRIME_EVAL,    cf + OFF_CODE_CRIME_EVAL,    VANILLA_CRIME_EVAL);
-            SyncSingleHook("HORSE_TAMING",  needTaming,       ref hookHorseTamingInstalled,  baseAddr + RVA_HORSE_TAMING,  cf + OFF_CODE_HORSE_TAMING,  VANILLA_HORSE_TAMING);
-            SyncSingleHook("BREATH_VITALS", needBreath,       ref hookBreathVitalsInstalled, baseAddr + RVA_BREATH_VITALS, cf + OFF_CODE_BREATH_VITALS, VANILLA_BREATH_VITALS);
-            SyncSingleHook("SLOT_EXPAND",   needSlotExpand,   ref hookSlotExpandInstalled,   baseAddr + RVA_SLOT_EXPAND,   cf + OFF_CODE_SLOT_EXPAND,   VANILLA_SLOT_EXPAND);
-            SyncSingleHook("ROMANCE_TRUST", needRomance,      ref hookRomanceTrustInstalled, baseAddr + RVA_ROMANCE_TRUST, cf + OFF_CODE_ROMANCE_TRUST, VANILLA_ROMANCE_TRUST);
-            SyncSingleHook("FRIENDLY_DAILY",needRomance,      ref hookFriendlyDailyInstalled,baseAddr + RVA_FRIENDLY_DAILY,cf + OFF_CODE_FRIENDLY_DAILY,VANILLA_FRIENDLY_DAILY);
-            SyncSingleHook("AFFINITY_ADD",  needRomance,      ref hookAffinityAddInstalled,  baseAddr + RVA_AFFINITY_ADD,  cf + OFF_CODE_AFFINITY_ADD,  VANILLA_AFFINITY_ADD);
-            SyncSingleHook("FRIENDLY_ADD",  needRomance,      ref hookFriendlyAddInstalled,  baseAddr + RVA_FRIENDLY_ADD,  cf + OFF_CODE_FRIENDLY_ADD,  VANILLA_FRIENDLY_ADD);
-            SyncSingleHook("COUNT_ITEMS",   needCountItems,   ref hookCountItemsInstalled,   baseAddr + RVA_COUNT_ITEMS,   cf + OFF_CODE_COUNT_ITEMS,   VANILLA_COUNT_ITEMS);
-            SyncSingleHook("WANTED_EVAL",   needWanted,       ref hookWantedEvalInstalled,   baseAddr + RVA_WANTED_EVAL,   cf + OFF_CODE_WANTED_EVAL,   VANILLA_WANTED_EVAL);
+            SyncSingleHook("DURABILITY",    needDurability,   ref hookDurabilityInstalled,   baseAddr + RVA_DURABILITY,    cf + OFF_CODE_DURABILITY,    VANILLA_DURABILITY,    needDurability,  extFlingActive, syncDurHits);
+            SyncSingleHook("CRIME_EVAL",    needCrime,        ref hookCrimeEvalInstalled,    baseAddr + RVA_CRIME_EVAL,    cf + OFF_CODE_CRIME_EVAL,    VANILLA_CRIME_EVAL,    needCrime,       extFlingActive, syncCrimeHits);
+            SyncSingleHook("HORSE_TAMING",  needTaming,       ref hookHorseTamingInstalled,  baseAddr + RVA_HORSE_TAMING,  cf + OFF_CODE_HORSE_TAMING,  VANILLA_HORSE_TAMING,  needTaming,      extFlingActive, syncTameHits);
+            SyncSingleHook("BREATH_VITALS", needBreath,       ref hookBreathVitalsInstalled, baseAddr + RVA_BREATH_VITALS, cf + OFF_CODE_BREATH_VITALS, VANILLA_BREATH_VITALS, needBreath,      extFlingActive, syncBreathHits);
+            SyncSingleHook("SLOT_EXPAND",   needSlotExpand,   ref hookSlotExpandInstalled,   baseAddr + RVA_SLOT_EXPAND,   cf + OFF_CODE_SLOT_EXPAND,   VANILLA_SLOT_EXPAND,   needSlotExpand,  extFlingActive, syncSlotHits);
+            SyncSingleHook("ROMANCE_TRUST", needRomance,      ref hookRomanceTrustInstalled, baseAddr + RVA_ROMANCE_TRUST, cf + OFF_CODE_ROMANCE_TRUST, VANILLA_ROMANCE_TRUST, needRomance,     extFlingActive, syncRomHits);
+            SyncSingleHook("FRIENDLY_DAILY",needRomance,      ref hookFriendlyDailyInstalled,baseAddr + RVA_FRIENDLY_DAILY,cf + OFF_CODE_FRIENDLY_DAILY,VANILLA_FRIENDLY_DAILY,needRomance,     extFlingActive, syncRomHits);
+            SyncSingleHook("AFFINITY_ADD",  needRomance,      ref hookAffinityAddInstalled,  baseAddr + RVA_AFFINITY_ADD,  cf + OFF_CODE_AFFINITY_ADD,  VANILLA_AFFINITY_ADD,  needRomance,     extFlingActive, syncRomHits);
+            SyncSingleHook("FRIENDLY_ADD",  needRomance,      ref hookFriendlyAddInstalled,  baseAddr + RVA_FRIENDLY_ADD,  cf + OFF_CODE_FRIENDLY_ADD,  VANILLA_FRIENDLY_ADD,  needRomance,     extFlingActive, syncRomHits);
+            SyncSingleHook("COUNT_ITEMS",   needCountItems,   ref hookCountItemsInstalled,   baseAddr + RVA_COUNT_ITEMS,   cf + OFF_CODE_COUNT_ITEMS,   VANILLA_COUNT_ITEMS,   needCountItems,  extFlingActive, syncCntHits);
+            SyncSingleHook("WANTED_EVAL",   needWanted,       ref hookWantedEvalInstalled,   baseAddr + RVA_WANTED_EVAL,   cf + OFF_CODE_WANTED_EVAL,   VANILLA_WANTED_EVAL,   needWanted,      extFlingActive, syncWantedHits);
 
             if (needCommit) {
                 byte[] nb = ReadBytes(cf + OFF_DATA_COMMIT_CNT, 4);
@@ -1922,14 +2140,27 @@ internal static class LiveMemoryCheatEngine {
                 cvBag, cvCraftCost, cvCraftSucc, cvImbue, cvSpec, cvRom, cvGear, cvGlove, cvMspd
             );
 
+            var hookStatesSnap = GetPublishedHookStatesSnapshot();
+            var hookStateEntries = new List<string>();
+            for (int hi = 0; hi < U16TrackedHooks.Length; hi++) {
+                string hk = U16TrackedHooks[hi];
+                HookTelemetryTuple ht;
+                if (!hookStatesSnap.TryGetValue(hk, out ht)) {
+                    ht = new HookTelemetryTuple(HOOK_STATE_NOT_REQUESTED, false, 0, FAIL_REASON_NONE);
+                }
+                hookStateEntries.Add(string.Format(inv, "\"{0}\": {1}", hk, ht.ToJsonObject()));
+            }
+            string hookStatesJson = "{" + string.Join(", ", hookStateEntries.ToArray()) + "}";
+
             string stateSig = string.Format(
                 inv,
-                "{0}|{1}|{2}|{3}|{4}",
+                "{0}|{1}|{2}|{3}|{4}|{5}",
                 activeCount,
                 (playerPtr >= 0x10000000L && (playerPtr >> 47) == 0) ? 1 : 0,
                 liveSilver,
                 hooksJoined.Length,
-                caveValuesJson
+                caveValuesJson,
+                hookStatesJson
             );
 
             if (stateSig == _lastHealthSignature && (DateTime.UtcNow - _lastHealthWriteUtc).TotalSeconds < 5.0) {
@@ -1963,6 +2194,7 @@ internal static class LiveMemoryCheatEngine {
                 "  \"live_silver\": {8},\r\n" +
                 "  \"installed_hooks\": [{9}],\r\n" +
                 "  \"hit_counters\": {{\"commit\": {10}, \"dur\": {11}, \"crime\": {12}, \"tame\": {13}, \"breath\": {14}, \"slot\": {15}, \"save\": {16}, \"sel\": {17}, \"rom\": {18}, \"cnt\": {19}, \"wanted\": {20}}},\r\n" +
+                "  \"hook_states\": {30},\r\n" +
                 "  \"cave_values\": {21}\r\n" +
                 "}}\r\n",
                 DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", inv),
@@ -1979,7 +2211,8 @@ internal static class LiveMemoryCheatEngine {
                 caveValuesJson,
                 playerPtr, staPtr, spiPtr, invMgrPtr, bagContPtr, hMountSeen,
                 (_fastJumpPollTimer != null) ? "true" : "false",
-                System.Threading.Interlocked.Read(ref _fastJumpPollTicks)
+                System.Threading.Interlocked.Read(ref _fastJumpPollTicks),
+                hookStatesJson
             );
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -3982,6 +4215,7 @@ internal static class LiveMemoryCheatEngine {
         hookDaytimeInstalled = hookExpInstalled = hookDurabilityInstalled = hookCrimeEvalInstalled = false;
         hookHorseTamingInstalled = hookBreathVitalsInstalled = hookSlotExpandInstalled = false;
         hookRomanceTrustInstalled = hookFriendlyDailyInstalled = hookAffinityAddInstalled = hookFriendlyAddInstalled = hookCountItemsInstalled = hookWantedEvalInstalled = false;
+        ResetPublishedHookStatesSnapshot();
     }
 
     public static void ApplyVisualContrastCurve(bool enable) {

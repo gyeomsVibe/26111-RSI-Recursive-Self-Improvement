@@ -4403,6 +4403,51 @@ class Launcher : Form {
                         l5.UpdateRsiStatus();
                         if (!l5.lblRsiStatus.Text.Contains("Tex:High"))
                             throw new Exception("Gate 8 UpdateRsiStatus did not parse active_parameters Tex:High: " + l5.lblRsiStatus.Text);
+
+                        // Gate 9 (U16 v3.1): Ordered 7-state hook telemetry partition, 4-tuple emission, and SyncSingleHook snapshot boundary
+                        LiveMemoryCheatEngine.ResetPublishedHookStatesSnapshot();
+                        if (!LiveMemoryCheatEngine.YieldsToFling("SAVE_ITEM") || !LiveMemoryCheatEngine.YieldsToFling("SELECTED_ITEM"))
+                            throw new Exception("Gate 9 SAVE_ITEM and SELECTED_ITEM must yield to FLiNG");
+                        string[] nonYieldHooks = new[] { "DURABILITY", "CRIME_EVAL", "ROMANCE_TRUST", "WANTED_EVAL" };
+                        for (int ny = 0; ny < nonYieldHooks.Length; ny++) {
+                            if (LiveMemoryCheatEngine.YieldsToFling(nonYieldHooks[ny]))
+                                throw new Exception("Gate 9 non-yielding hook falsely marked YieldsToFling: " + nonYieldHooks[ny]);
+                        }
+                        var t1 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("DURABILITY", true, false, false, true, 3, 3, "");
+                        var t2 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("CRIME_EVAL", true, true, false, false, 0, 12, "");
+                        var t3 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("DURABILITY", true, true, false, false, 0, 0, "");
+                        var t4 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("SAVE_ITEM", false, true, true, true, 5, 0, "");
+                        var t5 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("WANTED_EVAL", false, true, true, false, 0, 0, LiveMemoryCheatEngine.FAIL_REASON_VANILLA_MISMATCH);
+                        var t6 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("ROMANCE_TRUST", false, false, false, true, 9, 0, "");
+                        var t7 = LiveMemoryCheatEngine.EvaluateHookTelemetryTuple("SELECTED_ITEM", false, false, false, false, 0, 0, "");
+                        var seenStates = new HashSet<string>(StringComparer.Ordinal) {
+                            t1.State, t2.State, t3.State, t4.State, t5.State, t6.State, t7.State
+                        };
+                        if (seenStates.Count != 7
+                            || t1.State != LiveMemoryCheatEngine.HOOK_STATE_DISARM_PENDING
+                            || t2.State != LiveMemoryCheatEngine.HOOK_STATE_ARMED_HITS
+                            || t3.State != LiveMemoryCheatEngine.HOOK_STATE_ARMED_0_HITS
+                            || t4.State != LiveMemoryCheatEngine.HOOK_STATE_YIELDED_TO_FLING
+                            || t5.State != LiveMemoryCheatEngine.HOOK_STATE_ARM_FAILED
+                            || t6.State != LiveMemoryCheatEngine.HOOK_STATE_DISARMED
+                            || t7.State != LiveMemoryCheatEngine.HOOK_STATE_NOT_REQUESTED)
+                            throw new Exception("Gate 9 7-state partition mismatch: count=" + seenStates.Count);
+                        if (!t4.EverArmed || t4.HitsTotal != 5 || !string.IsNullOrEmpty(t4.FailReason))
+                            throw new Exception("Gate 9 Condition A violated on YIELDED_TO_FLING 4-tuple: " + t4.ToFourTupleString());
+                        if (t5.FailReason != LiveMemoryCheatEngine.FAIL_REASON_VANILLA_MISMATCH)
+                            throw new Exception("Gate 9 non-yielding WANTED_EVAL under extFlingActive must be ARM_FAILED(VANILLA_MISMATCH), got " + t5.ToFourTupleString());
+                        if (!t6.EverArmed || t6.HitsTotal != 9)
+                            throw new Exception("Gate 9 DISARMED did not preserve sticky ever_armed/hits_total: " + t6.ToFourTupleString());
+                        LiveMemoryCheatEngine.PublishHookTelemetryFromSync("SAVE_ITEM", true, true, false, 7, "");
+                        var snapAfterArm = LiveMemoryCheatEngine.GetPublishedHookStatesSnapshot()["SAVE_ITEM"];
+                        LiveMemoryCheatEngine.PublishHookTelemetryFromSync("SAVE_ITEM", false, true, true, 0, "");
+                        var snapAfterYield = LiveMemoryCheatEngine.GetPublishedHookStatesSnapshot()["SAVE_ITEM"];
+                        if (snapAfterArm.State != LiveMemoryCheatEngine.HOOK_STATE_ARMED_HITS || snapAfterArm.HitsTotal != 7
+                            || snapAfterYield.State != LiveMemoryCheatEngine.HOOK_STATE_YIELDED_TO_FLING
+                            || !snapAfterYield.EverArmed || snapAfterYield.HitsTotal != 7)
+                            throw new Exception("Gate 9 Condition B synchronous snapshot transition failed");
+                        LiveMemoryCheatEngine.ResetPublishedHookStatesSnapshot();
+                        Console.WriteLine("[GATE 9 PASS] U16 v3.1 7-State Hook Telemetry Partition + 4-Tuple + SyncSingleHook Snapshot OK");
                     }
                 } finally {
                     Launcher.SelfTestMode = false;

@@ -424,11 +424,11 @@ def check_emergency_stop():
         EMERGENCY_STOP_TRIGGERED = True
         return True
     try:
-        if (user32.GetAsyncKeyState(0x7B) & 0x8001) != 0:
+        if (user32.GetAsyncKeyState(0x7B) & 0x8000) != 0:
             EMERGENCY_STOP_TRIGGERED = True
             EMERGENCY_EVENT.set()
             return True
-        if (user32.GetAsyncKeyState(0x13) & 0x8001) != 0:
+        if (user32.GetAsyncKeyState(0x13) & 0x8000) != 0:
             EMERGENCY_STOP_TRIGGERED = True
             EMERGENCY_EVENT.set()
             return True
@@ -513,6 +513,19 @@ def _emergency_stop_daemon_loop():
 
 
 def start_emergency_stop_listener():
+    global EMERGENCY_STOP_TRIGGERED
+    if os.path.exists(STOP_FLAG_FILE):
+        try:
+            os.remove(STOP_FLAG_FILE)
+        except Exception:
+            pass
+    EMERGENCY_STOP_TRIGGERED = False
+    EMERGENCY_EVENT.clear()
+    try:
+        user32.GetAsyncKeyState(0x7B)
+        user32.GetAsyncKeyState(0x13)
+    except Exception:
+        pass
     t = threading.Thread(target=_emergency_stop_daemon_loop, daemon=True)
     t.start()
     return t
@@ -1250,19 +1263,56 @@ def run_auto_play(args):
             peak_gpu_temp = max(peak_gpu_temp, stats["gpu_temp"])
 
             matrix_len = len(EDITOR_TEST_MATRIX)
+            sustained_full_preset = {
+                "DamageTakenMode": "2",
+                "DamageDealtMultiplier": "2.0",
+                "PlayerStaminaMode": "4",
+                "CooldownMode": "2",
+                "ExpMultiplier": "2",
+                "RomanceMultiplier": "5",
+                "TamingMultiplier": "5",
+                "MountStaminaMode": "4",
+                "UnderwaterOxygenMultiplier": "999",
+                "CraftCostMode": "4",
+                "CraftSuccessMultiplier": "999",
+                "DurabilityMode": "4",
+                "GearHiderMode": "1",
+                "WeaponImbueMode": "3",
+                "ThiefDetectionMode": "3",
+                "PickpocketSuccessMode": "3",
+                "BountyImmunityMode": "3",
+                "ThiefGloveFenceMode": "3",
+                "BagExpandSlots": "60",
+            }
             if cycle_idx < matrix_len:
                 step_name, ini_overrides, hotkey_id = EDITOR_TEST_MATRIX[cycle_idx]
                 write_ini_config(ini_overrides)
-            elif cycle_idx % 20 == 0:
-                rot_idx = ((cycle_idx // 20) % (matrix_len - 2)) + 1
-                step_name, ini_overrides, _ = EDITOR_TEST_MATRIX[rot_idx]
-                hotkey_id = None
-                write_ini_config(ini_overrides)
-            elif cycle_idx % 20 == 3:
-                step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play", {}, None)
-                write_ini_config({})
+            elif cycle_idx == matrix_len or cycle_idx % 10 == 0:
+                step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play_AllHooksArmed", sustained_full_preset, None)
+                write_ini_config(sustained_full_preset)
             else:
-                step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play", {}, None)
+                step_name, ini_overrides, hotkey_id = ("Sustained_3D_Play_AllHooksArmed", sustained_full_preset, None)
+
+            if cycle_idx >= matrix_len and os.path.exists(LIVE_HEALTH_JSON):
+                try:
+                    with open(LIVE_HEALTH_JSON, "r", encoding="utf-8-sig") as hf:
+                        hdata = json.load(hf)
+                    cave_hex = hdata.get("cave_addr", "")
+                    if cave_hex.startswith("0x"):
+                        cave_int = int(cave_hex, 16)
+                        h_proc = ctypes.windll.kernel32.OpenProcess(0x001F0FFF, False, int(game_pid))
+                        if h_proc:
+                            try:
+                                # Arm SELECTED_ITEM safely in read-only hover mode (dEditAmt=1, dEditId=0)
+                                buf = ctypes.create_string_buffer(b"\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 12)
+                                written = ctypes.c_size_t(0)
+                                ctypes.windll.kernel32.WriteProcessMemory(
+                                    h_proc, ctypes.c_void_p(cave_int + 0x3060), buf, 12, ctypes.byref(written)
+                                )
+                            finally:
+                                ctypes.windll.kernel32.CloseHandle(h_proc)
+                except Exception:
+                    pass
             if hotkey_id is not None:
                 if launcher_hwnd:
                     user32.PostMessageW(launcher_hwnd, 0x0312, hotkey_id, 0)
@@ -1302,15 +1352,25 @@ def run_auto_play(args):
                     press_scancode("1", 0.12)
                     time.sleep(0.4)
                 elif scen == 2:
-                    hold_scancode("W", True)
-                    press_scancode("A", 0.25)
-                    press_scancode("SPACE", 0.14)
-                    time.sleep(0.35)
-                    press_scancode("D", 0.25)
-                    for _ in range(3):
-                        mouse_move_rel(-40, 8)
-                        time.sleep(0.3)
-                    hold_scancode("W", False)
+                    if cycle_idx >= matrix_len:
+                        press_scancode("I", 0.12)
+                        time.sleep(0.55)
+                        for sx, sy in ((1480, 360), (1560, 360), (1640, 420), (1520, 480)):
+                            user32.SetCursorPos(sx, sy)
+                            mouse_move_rel(4, 2)
+                            time.sleep(0.18)
+                        press_scancode("I", 0.12)
+                        time.sleep(0.35)
+                    else:
+                        hold_scancode("W", True)
+                        press_scancode("A", 0.25)
+                        press_scancode("SPACE", 0.14)
+                        time.sleep(0.35)
+                        press_scancode("D", 0.25)
+                        for _ in range(3):
+                            mouse_move_rel(-40, 8)
+                            time.sleep(0.3)
+                        hold_scancode("W", False)
                 else:
                     mouse_move_rel(60, 0)
                     time.sleep(0.3)
@@ -1360,9 +1420,38 @@ def run_auto_play(args):
             cycle_idx += 1
             time.sleep(1.4)
     finally:
+        armed_health_snap = None
+        disarmed_health_snap = None
+        try:
+            if os.path.exists(LIVE_HEALTH_JSON):
+                with open(LIVE_HEALTH_JSON, "r", encoding="utf-8-sig") as hf:
+                    armed_health_snap = json.load(hf)
+        except Exception:
+            pass
         release_all_keys()
+        if armed_health_snap and str(armed_health_snap.get("cave_addr", "")).startswith("0x") and game_pid:
+            try:
+                cave_int = int(armed_health_snap["cave_addr"], 16)
+                h_proc = ctypes.windll.kernel32.OpenProcess(0x001F0FFF, False, int(game_pid))
+                if h_proc:
+                    try:
+                        zbuf = ctypes.create_string_buffer(12)
+                        written = ctypes.c_size_t(0)
+                        ctypes.windll.kernel32.WriteProcessMemory(
+                            h_proc, ctypes.c_void_p(cave_int + 0x3060), zbuf, 12, ctypes.byref(written)
+                        )
+                    finally:
+                        ctypes.windll.kernel32.CloseHandle(h_proc)
+            except Exception:
+                pass
         restore_ini_config_safe_speeds(pre_ini_snap)
         time.sleep(1.5)
+        try:
+            if os.path.exists(LIVE_HEALTH_JSON):
+                with open(LIVE_HEALTH_JSON, "r", encoding="utf-8-sig") as hf:
+                    disarmed_health_snap = json.load(hf)
+        except Exception:
+            pass
 
         if pm_proc is not None and pm_proc.poll() is None:
             try:
@@ -1427,6 +1516,9 @@ def run_auto_play(args):
         "presentmon_summary": pm_summary,
         "screenshots": screenshots,
         "save_guard_restored_ok": restored_ok,
+        "armed_hook_states": (armed_health_snap or {}).get("hook_states"),
+        "armed_hit_counters": (armed_health_snap or {}).get("hit_counters"),
+        "disarmed_hook_states": (disarmed_health_snap or {}).get("hook_states"),
     }
     with open(os.path.join(session_art_dir, "session_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
